@@ -32,10 +32,22 @@ export default defineConfig({
         ]
       },
       workbox: {
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MiB para garantir cache offline de pacotes Edge AI
         globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm}']
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'transformers-vendor': ['@xenova/transformers'],
+          'n3-vendor': ['n3']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 2500
+  },
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

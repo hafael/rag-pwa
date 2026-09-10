@@ -75,6 +75,27 @@ export class IngestionService {
         kbId
       )
 
+      onProgress?.({ stage: 'Gerando embeddings vetoriais (all-MiniLM-L6-v2)...', percent: 55 })
+      try {
+        const { embeddingService } = await import('./vectorEmbeddings.js')
+        for (let i = 0; i < childChunks.length; i++) {
+          try {
+            const emb = await embeddingService.generateEmbedding(childChunks[i].content)
+            childChunks[i].embedding = emb
+          } catch (e) {
+            console.warn('Falha ao gerar embedding para o chunk:', i, e)
+          }
+
+          const pct = 55 + Math.round(((i + 1) / childChunks.length) * 25)
+          onProgress?.({
+            stage: `Vetorizando Chunks Filhos (${i + 1}/${childChunks.length})...`,
+            percent: Math.min(pct, 80)
+          })
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar serviço de embeddings:', err)
+      }
+
       onProgress?.({ stage: 'Salvando no banco IndexedDB (Dexie)...', percent: 85 })
       await db.transaction('rw', [db.documents, db.parentChunks, db.childChunks], async () => {
         await db.documents.add({

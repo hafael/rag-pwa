@@ -103,20 +103,56 @@ DIRETRIZES OBRIGATÓRIAS:
         >
           <div class="whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
 
-          <!-- Metadados de Recuperação RAG (se houver chunks recuperados) -->
+          <!-- Metadados de Recuperação RAG Híbrido (Dense + BM25 + RRF + Ontology Boost) -->
           <div v-if="msg.retrievedChunks && msg.retrievedChunks.length > 0" class="mt-3 pt-2.5 border-t border-slate-700/60 text-[11px] text-slate-400">
-            <div class="font-semibold text-indigo-300 mb-1 flex items-center gap-1">
-              <Layers class="w-3.5 h-3.5" />
-              Fontes Recuperadas (Chunks Pais):
+            <div class="flex items-center justify-between font-semibold text-indigo-300 mb-1.5">
+              <span class="flex items-center gap-1.5">
+                <Layers class="w-3.5 h-3.5 text-indigo-400" />
+                Fontes Recuperadas (Chunks Pais por RRF):
+              </span>
+              <span v-if="msg.ragStats" class="text-[10px] text-slate-400 font-normal">
+                Busca: {{ msg.ragStats.denseMatches }} densas / {{ msg.ragStats.sparseMatches }} esparsas
+              </span>
             </div>
-            <div class="space-y-1">
+
+            <div class="space-y-1.5">
               <div
                 v-for="(chunk, idx) in msg.retrievedChunks"
                 :key="idx"
-                class="p-2 rounded bg-slate-900/60 border border-slate-800 text-[11px]"
+                class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] space-y-1"
               >
-                <div class="font-medium text-slate-300">{{ chunk.sectionTitle || 'Trecho ' + (idx + 1) }}</div>
-                <div class="text-slate-400 truncate">{{ chunk.content }}</div>
+                <div class="flex items-center justify-between">
+                  <div class="font-medium text-slate-200 flex items-center gap-1.5">
+                    <span class="text-indigo-400">#{{ idx + 1 }}</span>
+                    <span>{{ chunk.sectionTitle || 'Trecho ' + (idx + 1) }}</span>
+                  </div>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+                    Chunk Pai
+                  </span>
+                </div>
+                <p class="text-slate-300 leading-snug line-clamp-3">{{ chunk.content }}</p>
+              </div>
+            </div>
+
+            <!-- Detalhamento dos Chunks Filhos ranqueados por RRF -->
+            <div v-if="msg.rankedChildren && msg.rankedChildren.length > 0" class="mt-2 pt-2 border-t border-slate-800/80">
+              <div class="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 mb-1 flex items-center gap-1">
+                <GitCommit class="w-3 h-3" />
+                Chunks Filhos Ranqueados (RRF Fusão k=60):
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <div
+                  v-for="(item, cIdx) in msg.rankedChildren.slice(0, 4)"
+                  :key="cIdx"
+                  class="text-[9px] font-mono px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5"
+                >
+                  <span class="text-indigo-300 font-semibold">RRF: {{ (item.rrfScore * 1000).toFixed(2) }}</span>
+                  <span v-if="item.denseSimilarity" class="text-emerald-300">Cos: {{ item.denseSimilarity.toFixed(2) }}</span>
+                  <span v-if="item.sparseScore" class="text-amber-300">BM25: {{ item.sparseScore.toFixed(1) }}</span>
+                  <span v-if="item.hasOntologyBoost" class="text-[8px] bg-cyan-500/20 text-cyan-300 px-1 rounded font-bold">
+                    OWL Boost +25%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -155,7 +191,7 @@ DIRETRIZES OBRIGATÓRIAS:
 
 <script setup>
 import { ref, nextTick, watch } from 'vue'
-import { MessageSquare, ShieldAlert, Sparkles, Send, Layers, Trash2, RefreshCw, X } from '@lucide/vue'
+import { MessageSquare, ShieldAlert, Sparkles, Send, Layers, Trash2, RefreshCw, GitCommit, X } from '@lucide/vue'
 
 const props = defineProps({
   activeKb: {

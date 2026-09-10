@@ -113,6 +113,7 @@ import { db, kbService, docService, chatService } from './db/index.js'
 import { checkHardwareCapabilities } from './services/hardware.js'
 import { ingestionService } from './services/ingestion.js'
 import { ontologyEngine } from './services/ontologyEngine.js'
+import { hybridRagEngine } from './services/hybridRag.js'
 
 const navTabs = [
   { id: 'chat', label: 'RAG Chat', icon: MessageSquare },
@@ -272,35 +273,17 @@ async function handleSendMessage(query) {
     const activeTriples = await db.ontologyTriples.where({ kbId }).toArray()
     const expansion = ontologyEngine.expandQuery(query, activeTriples)
 
-    // 3. Busca sobre Chunks Filhos (Parent-Child)
-    const childList = await db.childChunks.where({ kbId }).toArray()
-    let retrievedParents = []
+    // 3. Execução da Busca RAG Híbrida Tripla (Dense Cosine + Sparse BM25 + RRF + OWL Boost)
+    const ragResult = await hybridRagEngine.search({
+      query,
+      kbId,
+      expandedTerms: expansion.expandedTerms,
+      rulesMatched: expansion.rulesMatched,
+      topChildK: 8,
+      topParentK: 3
+    })
 
-    if (childList.length > 0) {
-      // Coleta termos da consulta original e termos expandidos pela ontologia
-      const searchTerms = [
-        ...query.toLowerCase().split(/\s+/),
-        ...expansion.expandedTerms.map(t => t.toLowerCase())
-      ].filter(t => t.length > 2)
-
-      const scored = childList.map(c => {
-        let matches = 0
-        const contentLower = c.content.toLowerCase()
-        searchTerms.forEach(term => {
-          if (contentLower.includes(term)) {
-            // Se o termo for da ontologia, recebe boost
-            matches += expansion.expandedTerms.some(et => et.toLowerCase() === term) ? 1.5 : 1.0
-          }
-        })
-        return { chunk: c, score: matches }
-      }).filter(s => s.score > 0).sort((a, b) => b.score - a.score)
-
-      if (scored.length > 0) {
-        // Recupera Chunks Pais dos melhores filhos (N=3)
-        const topParentIds = [...new Set(scored.slice(0, 3).map(s => s.chunk.parentId))]
-        retrievedParents = await db.parentChunks.where('id').anyOf(topParentIds).toArray()
-      }
-    }
+    const retrievedParents = ragResult.retrievedParents
 
     // 4. Formata regras ontológicas formais para o Prompt Anti-Viés
     const formattedRules = ontologyEngine.formatOntologicalRules(expansion.rulesMatched)
@@ -321,6 +304,8 @@ async function handleSendMessage(query) {
 
     await chatService.addMessage(kbId, 'assistant', responseText, {
       retrievedChunks: retrievedParents,
+      rankedChildren: ragResult.rankedChildren,
+      ragStats: ragResult.stats,
       ontologyRulesUsed: expansion.rulesMatched
     })
 
