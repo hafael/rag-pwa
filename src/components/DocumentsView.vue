@@ -5,10 +5,10 @@
       <div>
         <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
           <FileText class="w-5 h-5 text-indigo-400" />
-          Documentos & Base Local
+          Carregar documentos
         </h2>
         <p class="text-xs text-slate-400 mt-0.5">
-          Base: <span class="text-indigo-300 font-semibold">{{ activeKb?.name || 'Selecione uma Base' }}</span>
+          <span class="text-indigo-300 font-semibold">{{ activeKb?.name || 'Selecione uma Base' }}</span>
         </p>
       </div>
 
@@ -18,7 +18,7 @@
           class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition"
         >
           <Plus class="w-4 h-4" />
-          Novo Documento / OWL
+          Novo Documento
         </button>
       </div>
     </div>

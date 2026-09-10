@@ -8,13 +8,13 @@
         </div>
         <div>
           <h3 class="text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-2">
-            RAG Chat & Inferência de Borda
+            RAG Chat
             <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
               Llama-3.2-1B-Instruct
             </span>
           </h3>
           <p class="text-[11px] text-slate-400">
-            Base Ativa: <span class="text-slate-300 font-medium">{{ activeKb?.name || 'Nenhuma selecionada' }}</span>
+            BC: <span class="text-slate-300 font-medium">{{ activeKb?.name || 'Nenhuma selecionada' }}</span>
           </p>
         </div>
       </div>
@@ -68,9 +68,9 @@ DIRETRIZES OBRIGATÓRIAS:
         <div class="p-4 rounded-2xl bg-slate-800/40 border border-slate-800 mb-3">
           <Sparkles class="w-7 h-7 text-indigo-400/80" />
         </div>
-        <h4 class="text-sm font-semibold text-slate-300">Assistente RAG Pronto</h4>
+        <h4 class="text-sm font-semibold text-slate-300">Assistente de pesquisa</h4>
         <p class="text-xs text-slate-500 max-w-md mt-1 mb-4">
-          Faça perguntas sobre os documentos indexados na base "{{ activeKb?.name || 'padrão' }}". O motor utilizará busca híbrida (Dense + Sparse BM25 + Ontologia OWL).
+          Faça perguntas sobre os documentos indexados na base "{{ activeKb?.name || 'padrão' }}". O motor utilizará busca híbrida (Dense + Sparse BM25 + Ontologias) baseada em IA totalmente no seu dispositivo. Nenhum documento ou parte é enviada para processamento externo em servidor remoto.
         </p>
         <div class="flex flex-wrap gap-2 justify-center max-w-lg">
           <button

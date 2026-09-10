@@ -111,7 +111,7 @@
       <!-- Ações -->
       <div class="mt-6 flex items-center justify-between border-t border-slate-800 pt-4">
         <span class="text-[11px] text-slate-500">
-          Processamento 100% no cliente (Web Worker)
+          Processamento 100% no dispositivo (offline)
         </span>
         <div class="flex gap-2">
           <button

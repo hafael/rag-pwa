@@ -9,14 +9,11 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="font-bold text-slate-100 tracking-tight text-base sm:text-lg">
-              RAG Híbrido PWA
+              EdgeRAG
             </h1>
-            <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              Edge AI
-            </span>
           </div>
           <p class="text-xs text-slate-400 hidden sm:block">
-            Inferência local 100% no navegador com Ontologias OWL & Parent-Child
+            Busca com IA 100% offline
           </p>
         </div>
       </div>

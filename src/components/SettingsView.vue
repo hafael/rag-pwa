@@ -155,11 +155,18 @@ const errorMessage = ref(null)
 
 const supportedModels = [
   {
+    id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    name: 'Qwen2.5-1.5B-Instruct',
+    description: 'Perfil Leve / Mobile. Boa performance em raciocínio lógico e compreensão de contexto.',
+    vram: '~1.6 GB',
+    recommended: true
+  },
+  {
     id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
     name: 'Llama-3.2-1B-Instruct',
     description: 'Perfil Leve / Mobile. Menor uso de recursos e carregamento ágil no navegador.',
     vram: '~1.5 GB',
-    recommended: true
+    recommended: false
   },
   {
     id: 'Phi-3.5-mini-instruct-q4f16_1-MLC',

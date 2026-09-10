@@ -6,7 +6,7 @@ import { CreateMLCEngine } from '@mlc-ai/web-llm'
 export class WebLlmService {
   constructor() {
     this.engine = null
-    this.currentModelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC'
+    this.currentModelId = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC'
     this.status = 'idle' // 'idle' | 'loading' | 'ready' | 'generating' | 'error'
     this.loadingProgress = { text: '', progress: 0 }
     this.errorMessage = null
