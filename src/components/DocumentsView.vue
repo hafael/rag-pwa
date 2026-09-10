@@ -94,7 +94,16 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              v-if="doc.fileType !== 'ontology'"
+              @click="$emit('inspect-doc', doc)"
+              class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
+              title="Inspecionar Chunks Pais e Filhos"
+            >
+              <Layers class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">Ver Chunks</span>
+            </button>
             <button
               @click="$emit('delete-doc', doc.id)"
               class="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
@@ -110,7 +119,7 @@
 </template>
 
 <script setup>
-import { FileText, FileCode, Plus, Trash2 } from '@lucide/vue'
+import { FileText, FileCode, Plus, Trash2, Layers } from '@lucide/vue'
 
 defineProps({
   activeKb: {
@@ -127,7 +136,7 @@ defineProps({
   }
 })
 
-defineEmits(['open-upload', 'delete-doc'])
+defineEmits(['open-upload', 'delete-doc', 'inspect-doc'])
 
 function formatFileSize(bytes) {
   if (!bytes) return '0 B'

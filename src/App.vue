@@ -46,6 +46,7 @@
         :stats="stats"
         @open-upload="isUploadModalOpen = true"
         @delete-doc="handleDeleteDocument"
+        @inspect-doc="handleInspectDocument"
       />
 
       <!-- Aba: Ontologias OWL -->
@@ -81,8 +82,17 @@
     <DocumentUploadModal
       :is-open="isUploadModalOpen"
       :is-processing="isProcessingUpload"
+      :upload-progress="uploadProgress"
       @close="isUploadModalOpen = false"
       @upload="handleUploadDocument"
+    />
+
+    <ChunkInspectorModal
+      :is-open="isInspectModalOpen"
+      :document="selectedDocToInspect"
+      :parents="inspectParents"
+      :children="inspectChildren"
+      @close="isInspectModalOpen = false"
     />
   </div>
 </template>
@@ -94,12 +104,15 @@ import Header from './components/Header.vue'
 import HardwareBanner from './components/HardwareBanner.vue'
 import KnowledgeBaseModal from './components/KnowledgeBaseModal.vue'
 import DocumentUploadModal from './components/DocumentUploadModal.vue'
+import ChunkInspectorModal from './components/ChunkInspectorModal.vue'
 import DocumentsView from './components/DocumentsView.vue'
 import ChatView from './components/ChatView.vue'
 import OntologyView from './components/OntologyView.vue'
 import SettingsView from './components/SettingsView.vue'
 import { db, kbService, docService, chatService } from './db/index.js'
 import { checkHardwareCapabilities } from './services/hardware.js'
+import { ingestionService } from './services/ingestion.js'
+import { ontologyEngine } from './services/ontologyEngine.js'
 
 const navTabs = [
   { id: 'chat', label: 'RAG Chat', icon: MessageSquare },
@@ -126,6 +139,13 @@ const isKbModalOpen = ref(false)
 const isHardwareModalOpen = ref(false)
 const isUploadModalOpen = ref(false)
 const isProcessingUpload = ref(false)
+const uploadProgress = ref({ stage: '', percent: 0 })
+
+const isInspectModalOpen = ref(false)
+const selectedDocToInspect = ref(null)
+const inspectParents = ref([])
+const inspectChildren = ref([])
+
 const isGenerating = ref(false)
 
 onMounted(async () => {
@@ -141,7 +161,6 @@ async function reloadKnowledgeBases() {
   knowledgeBases.value = kbs
 
   if (kbs.length === 0) {
-    // Cria base inicial padrão
     const defaultKb = await kbService.create(
       'Base de Conhecimento Geral',
       'Base inicial para ingestão de documentos e ontologias'
@@ -197,135 +216,36 @@ async function handleDeleteDocument(docId) {
   }
 }
 
+async function handleInspectDocument(doc) {
+  selectedDocToInspect.value = doc
+  const [pList, cList] = await Promise.all([
+    db.parentChunks.where({ docId: doc.id }).sortBy('orderIndex'),
+    db.childChunks.where({ docId: doc.id }).sortBy('orderIndex')
+  ])
+  inspectParents.value = pList
+  inspectChildren.value = cList
+  isInspectModalOpen.value = true
+}
+
 async function handleClearHistory() {
   if (!activeKb.value) return
   await chatService.clearHistory(activeKb.value.id)
   messages.value = []
 }
 
-async function handleUploadDocument({ file, strategy, isOntology }) {
+async function handleUploadDocument({ file, strategy }) {
   if (!activeKb.value) return
   isProcessingUpload.value = true
+  uploadProgress.value = { stage: 'Iniciando ingestão...', percent: 10 }
 
   try {
-    const textContent = await file.text()
-    const docId = crypto.randomUUID()
-    const kbId = activeKb.value.id
-
-    if (isOntology) {
-      // Processamento simples inicial de arquivo OWL/Turtle/RDF
-      // Extração básica de triplas e declarações conceituais
-      const lines = textContent.split('\n')
-      const newTriples = []
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (trimmed.startsWith('#') || !trimmed) continue
-
-        // Procura por declarações simples de classe ou triplas
-        if (trimmed.includes('a ') || trimmed.includes('subClassOf') || trimmed.includes('rdf:type')) {
-          const parts = trimmed.split(/\s+/)
-          if (parts.length >= 3) {
-            newTriples.push({
-              id: crypto.randomUUID(),
-              kbId,
-              subject: parts[0].replace(/[<>;]/g, ''),
-              predicate: parts[1].replace(/[<>;]/g, ''),
-              object: parts.slice(2).join(' ').replace(/[<>;.]/g, '')
-            })
-          }
-        }
+    await ingestionService.ingestFile(file, {
+      kbId: activeKb.value.id,
+      strategyType: strategy,
+      onProgress: (prog) => {
+        uploadProgress.value = prog
       }
-
-      if (newTriples.length > 0) {
-        await db.ontologyTriples.bulkAdd(newTriples)
-      }
-
-      await db.documents.add({
-        id: docId,
-        kbId,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: 'ontology',
-        strategyUsed: 'Ontology Graph Extraction',
-        parentCount: 0,
-        childCount: newTriples.length,
-        createdAt: Date.now()
-      })
-    } else {
-      // Pipeline de Chunking Parent-Child inicial (Fase 1)
-      const parentChunks = []
-      const childChunks = []
-
-      // Quebra de Chunks Pais (por seções / parágrafos)
-      let rawParents = []
-      if (strategy === 'section') {
-        // Divisão por cabeçalhos (# ou quebras duplas)
-        const sections = textContent.split(/\n(?=#{1,6}\s)/g)
-        rawParents = sections.length > 1 ? sections : textContent.split('\n\n')
-      } else if (strategy === 'paragraph') {
-        rawParents = textContent.split('\n\n')
-      } else {
-        // Token / default
-        const words = textContent.split(/\s+/)
-        const pSize = 400
-        for (let i = 0; i < words.length; i += pSize) {
-          rawParents.push(words.slice(i, i + pSize).join(' '))
-        }
-      }
-
-      // Para cada Chunk Pai, gera Chunks Filhos homogêneos (~100-120 palavras)
-      rawParents.forEach((pText, pIdx) => {
-        const trimmedParent = pText.trim()
-        if (!trimmedParent) return
-
-        const parentId = crypto.randomUUID()
-        parentChunks.push({
-          id: parentId,
-          docId,
-          kbId,
-          sectionTitle: `Seção / Bloco ${pIdx + 1}`,
-          content: trimmedParent,
-          orderIndex: pIdx
-        })
-
-        // Geração dos Chunks Filhos correspondentes
-        const childWords = trimmedParent.split(/\s+/)
-        const cSize = 100
-        const cOverlap = 20
-
-        for (let j = 0; j < childWords.length; j += (cSize - cOverlap)) {
-          const slice = childWords.slice(j, j + cSize).join(' ')
-          if (slice.trim()) {
-            childChunks.push({
-              id: crypto.randomUUID(),
-              parentId,
-              docId,
-              kbId,
-              content: slice.trim(),
-              orderIndex: j
-            })
-          }
-        }
-      })
-
-      // Salva Documento, Chunks Pais e Chunks Filhos no IndexedDB
-      await db.transaction('rw', [db.documents, db.parentChunks, db.childChunks], async () => {
-        await db.documents.add({
-          id: docId,
-          kbId,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: 'text',
-          strategyUsed: strategy,
-          parentCount: parentChunks.length,
-          childCount: childChunks.length,
-          createdAt: Date.now()
-        })
-        await db.parentChunks.bulkAdd(parentChunks)
-        await db.childChunks.bulkAdd(childChunks)
-      })
-    }
+    })
 
     await reloadActiveKbData()
     isUploadModalOpen.value = false
@@ -334,6 +254,7 @@ async function handleUploadDocument({ file, strategy, isOntology }) {
     alert('Erro ao processar o arquivo: ' + err.message)
   } finally {
     isProcessingUpload.value = false
+    uploadProgress.value = { stage: '', percent: 0 }
   }
 }
 
@@ -347,44 +268,60 @@ async function handleSendMessage(query) {
   isGenerating.value = true
 
   try {
-    // 2. Busca RAG simulada para a Fase 1 (recupera chunks locais correspondentes)
+    // 2. Query Expansion ontológico via OntologyEngine (Seção 4.2 do plano)
+    const activeTriples = await db.ontologyTriples.where({ kbId }).toArray()
+    const expansion = ontologyEngine.expandQuery(query, activeTriples)
+
+    // 3. Busca sobre Chunks Filhos (Parent-Child)
     const childList = await db.childChunks.where({ kbId }).toArray()
     let retrievedParents = []
 
     if (childList.length > 0) {
-      // Busca léxica preliminar nos filhos para teste
-      const terms = query.toLowerCase().split(/\s+/)
+      // Coleta termos da consulta original e termos expandidos pela ontologia
+      const searchTerms = [
+        ...query.toLowerCase().split(/\s+/),
+        ...expansion.expandedTerms.map(t => t.toLowerCase())
+      ].filter(t => t.length > 2)
+
       const scored = childList.map(c => {
         let matches = 0
-        terms.forEach(t => {
-          if (c.content.toLowerCase().includes(t)) matches++
+        const contentLower = c.content.toLowerCase()
+        searchTerms.forEach(term => {
+          if (contentLower.includes(term)) {
+            // Se o termo for da ontologia, recebe boost
+            matches += expansion.expandedTerms.some(et => et.toLowerCase() === term) ? 1.5 : 1.0
+          }
         })
         return { chunk: c, score: matches }
       }).filter(s => s.score > 0).sort((a, b) => b.score - a.score)
 
       if (scored.length > 0) {
-        // Recupera Chunks Pais dos melhores filhos
+        // Recupera Chunks Pais dos melhores filhos (N=3)
         const topParentIds = [...new Set(scored.slice(0, 3).map(s => s.chunk.parentId))]
         retrievedParents = await db.parentChunks.where('id').anyOf(topParentIds).toArray()
       }
     }
 
-    // Regras ontológicas ativas
-    const activeTriples = await db.ontologyTriples.where({ kbId }).limit(5).toArray()
+    // 4. Formata regras ontológicas formais para o Prompt Anti-Viés
+    const formattedRules = ontologyEngine.formatOntologicalRules(expansion.rulesMatched)
 
-    // 3. Montagem da resposta respeitando as regras estritas anti-alucinação
+    // 5. Montagem da resposta respeitando as regras estritas anti-alucinação
     let responseText = ''
     if (retrievedParents.length > 0) {
       responseText = `Com base nas evidências dos documentos carregados na base "${activeKb.value.name}":\n\n` +
-        retrievedParents.map((p, i) => `[Evidência ${i + 1}]: "${p.content.slice(0, 200)}..."`).join('\n\n') +
-        `\n\n(Aviso: Na Fase 4, a geração textual final será sintetizada via WebLLM acelerado por WebGPU).`
+        retrievedParents.map((p, i) => `[Evidência ${i + 1} - ${p.sectionTitle}]:\n"${p.content}"`).join('\n\n')
+
+      if (expansion.rulesMatched.length > 0) {
+        responseText += `\n\n[Regras Ontológicas Formais Validadas]:\n${formattedRules}`
+      }
+      responseText += `\n\n(Aviso: Na Fase 4, a síntese textual final será orquestrada via WebLLM em WebGPU com este contexto exato).`
     } else {
       responseText = 'Não há informações suficientes na base de conhecimento carregada para responder a esta questão com base nas evidências locais indexadas.'
     }
 
     await chatService.addMessage(kbId, 'assistant', responseText, {
       retrievedChunks: retrievedParents,
-      ontologyRulesUsed: activeTriples
+      ontologyRulesUsed: expansion.rulesMatched
     })
 
     messages.value = await chatService.getMessagesByKb(kbId)

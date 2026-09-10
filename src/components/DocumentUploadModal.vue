@@ -89,17 +89,35 @@
             </p>
           </div>
         </div>
+
+        <!-- Barra de Progresso da Ingestão (Web Worker) -->
+        <div v-if="isProcessing" class="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 space-y-2 animate-fade-in">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-medium text-indigo-300 flex items-center gap-2">
+              <RefreshCw class="w-3.5 h-3.5 animate-spin" />
+              {{ uploadProgress?.stage || 'Processando no Web Worker...' }}
+            </span>
+            <span class="font-mono text-indigo-200 font-semibold">{{ uploadProgress?.percent || 50 }}%</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300 rounded-full"
+              :style="{ width: `${uploadProgress?.percent || 50}%` }"
+            ></div>
+          </div>
+        </div>
       </div>
 
       <!-- Ações -->
       <div class="mt-6 flex items-center justify-between border-t border-slate-800 pt-4">
         <span class="text-[11px] text-slate-500">
-          Processamento 100% no cliente
+          Processamento 100% no cliente (Web Worker)
         </span>
         <div class="flex gap-2">
           <button
             @click="$emit('close')"
-            class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+            :disabled="isProcessing"
+            class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-50 transition"
           >
             Cancelar
           </button>
@@ -119,7 +137,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { UploadCloud, FileText, Network, X } from '@lucide/vue'
+import { UploadCloud, FileText, Network, RefreshCw, X } from '@lucide/vue'
 
 const props = defineProps({
   isOpen: {
@@ -129,6 +147,10 @@ const props = defineProps({
   isProcessing: {
     type: Boolean,
     default: false
+  },
+  uploadProgress: {
+    type: Object,
+    default: () => ({ stage: '', percent: 0 })
   }
 })
 
@@ -149,7 +171,7 @@ const strategies = [
   {
     id: 'paragraph',
     title: 'Por Parágrafo',
-    desc: 'Segmenta Chunks Pai por quebras duplas de linha (\n\n).'
+    desc: 'Segmenta Chunks Pai por quebras duplas de linha.'
   },
   {
     id: 'sentence',
@@ -157,9 +179,14 @@ const strategies = [
     desc: 'Segmenta por períodos gramaticais completos.'
   },
   {
+    id: 'page',
+    title: 'Por Página (Documentos PDF)',
+    desc: 'Separa Chunks Pais por marcadores estruturais de página.'
+  },
+  {
     id: 'tokens',
     title: 'Janela de Palavras Fixas',
-    desc: 'Blocos de 500 palavras no Pai e 120 palavras com overlap no Filho.'
+    desc: 'Blocos de 450 palavras no Pai e 120 palavras no Filho com overlap.'
   }
 ]
 
