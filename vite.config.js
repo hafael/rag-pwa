@@ -4,12 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: './', // Permite hospedagem em subdiretórios no GitHub Pages sem erros de assets
   plugins: [
     vue(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['icon.svg', 'coi-serviceworker.js'],
       manifest: {
         name: 'RAG Híbrido PWA Offline',
         short_name: 'RAG PWA',
@@ -20,19 +21,15 @@ export default defineConfig({
         orientation: 'any',
         icons: [
           {
-            src: '/pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
+            src: 'icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable'
           }
         ]
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6 MiB para garantir cache offline de pacotes Edge AI
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MiB para garantir cache offline de pacotes Edge AI e WebLLM
         globPatterns: ['**/*.{js,css,html,ico,png,svg,wasm}']
       }
     })
@@ -47,7 +44,7 @@ export default defineConfig({
         }
       }
     },
-    chunkSizeWarningLimit: 2500
+    chunkSizeWarningLimit: 6500
   },
   server: {
     headers: {

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="50%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#0891b2" stop-opacity="0.8" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="#0f172a" />
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="none" stroke="url(#glow)" stroke-width="4" opacity="0.4" />
+  <g transform="translate(106, 106) scale(12.5)">
+    <!-- Layers Icon SVG path -->
+    <path d="M12 2L2 7l10 5 10-5-10-5z" fill="url(#grad)" />
+    <path d="M2 17l10 5 10-5" fill="none" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M2 12l10 5 10-5" fill="none" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
