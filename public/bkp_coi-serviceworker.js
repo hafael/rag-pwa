@@ -1,4 +1,4 @@
-/*! coi-serviceworker v0.1.7 (Patched com trava anti-loop) - Guido Zuidhof and contributors, licensed under MIT */
+/*! coi-serviceworker v0.1.7 - Guido Zuidhof and contributors, licensed under MIT */
 let coepCredentialless = false;
 if (typeof window === 'undefined') {
     self.addEventListener("install", () => self.skipWaiting());
@@ -60,14 +60,12 @@ if (typeof window === 'undefined') {
 
 } else {
     (() => {
+        // You can customize the behavior of this script through a global `coi` variable.
         const coi = {
             shouldRegister: () => true,
             shouldDeregister: () => false,
             coepCredentialless: () => !(window.chrome || window.netscape),
-            doReload: () => {
-                sessionStorage.setItem("coi_reload_attempt", "true");
-                window.location.reload();
-            },
+            doReload: () => window.location.reload(),
             quiet: false,
             ...window.coi
         };
@@ -85,34 +83,27 @@ if (typeof window === 'undefined') {
             }
         }
 
-        // Se o isolamento já está ativo, remove a flag de controle
-        if (window.crossOriginIsolated !== false || !coi.shouldRegister()) {
-            sessionStorage.removeItem("coi_reload_attempt");
-            return;
-        }
-
-        // Trava anti-loop: se já tentou recarregar na sessão atual e o contexto continua desisolado, cancela o recarregamento
-        if (sessionStorage.getItem("coi_reload_attempt")) {
-            sessionStorage.removeItem("coi_reload_attempt");
-            !coi.quiet && console.warn("COOP/COEP Service Worker: Loop de reload bloqueado. O contexto não pôde ser isolado.");
-            return;
-        }
+        // If we're already coi: do nothing. Perhaps it's due to this script doing its job, or COOP/COEP are
+        // already set from the origin server. Also if the browser has no notion of crossOriginIsolated, just give up here.
+        if (window.crossOriginIsolated !== false || !coi.shouldRegister()) return;
 
         if (!window.isSecureContext) {
             !coi.quiet && console.log("COOP/COEP Service Worker not registered, a secure context is required.");
             return;
         }
 
+        // In some environments (e.g. Chrome incognito mode) this won't be available
         if (n.serviceWorker) {
             n.serviceWorker.register(window.document.currentScript.src).then(
                 (registration) => {
                     !coi.quiet && console.log("COOP/COEP Service Worker registered", registration.scope);
 
                     registration.addEventListener("updatefound", () => {
-                        !coi.quiet && console.log("Reloading page to make use of updated COOP/COEP Service Worker.");
+                        !coi.quiet && console.log(" to make use of updated COOP/COEP Service Worker.");
                         coi.doReload();
                     });
 
+                    // If the registration is active, but it's not controlling the page
                     if (registration.active && !n.serviceWorker.controller) {
                         !coi.quiet && console.log("Reloading page to make use of COOP/COEP Service Worker.");
                         coi.doReload();
