@@ -41,6 +41,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          'webllm-vendor': ['@mlc-ai/web-llm'],
           'transformers-vendor': ['@xenova/transformers'],
           'n3-vendor': ['n3']
         }

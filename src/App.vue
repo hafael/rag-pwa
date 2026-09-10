@@ -114,6 +114,7 @@ import { checkHardwareCapabilities } from './services/hardware.js'
 import { ingestionService } from './services/ingestion.js'
 import { ontologyEngine } from './services/ontologyEngine.js'
 import { hybridRagEngine } from './services/hybridRag.js'
+import { webLlmService } from './services/webLlm.js'
 
 const navTabs = [
   { id: 'chat', label: 'RAG Chat', icon: MessageSquare },
@@ -285,24 +286,68 @@ async function handleSendMessage(query) {
 
     const retrievedParents = ragResult.retrievedParents
 
-    // 4. Formata regras ontológicas formais para o Prompt Anti-Viés
-    const formattedRules = ontologyEngine.formatOntologicalRules(expansion.rulesMatched)
+    // 4. Se não recuperou nenhum chunk, aplica a diretriz obrigatória de mitigação de alucinação
+    if (retrievedParents.length === 0) {
+      const emptyNotice = 'Não há informações suficientes na base de conhecimento carregada para responder a esta questão.'
+      await chatService.addMessage(kbId, 'assistant', emptyNotice, {
+        retrievedChunks: [],
+        rankedChildren: [],
+        ragStats: ragResult.stats,
+        ontologyRulesUsed: expansion.rulesMatched
+      })
+      messages.value = await chatService.getMessagesByKb(kbId)
+      return
+    }
 
-    // 5. Montagem da resposta respeitando as regras estritas anti-alucinação
-    let responseText = ''
-    if (retrievedParents.length > 0) {
-      responseText = `Com base nas evidências dos documentos carregados na base "${activeKb.value.name}":\n\n` +
+    // 5. Cria mensagem de streaming provisória para renderização reativa
+    const tempMsg = {
+      id: crypto.randomUUID(),
+      kbId,
+      role: 'assistant',
+      content: '',
+      retrievedChunks: retrievedParents,
+      rankedChildren: ragResult.rankedChildren,
+      ragStats: ragResult.stats,
+      ontologyRulesUsed: expansion.rulesMatched,
+      createdAt: Date.now()
+    }
+    messages.value.push(tempMsg)
+
+    // 6. Tentativa de inferência local via WebLLM com streaming de tokens na WebGPU
+    let assistantResponse = ''
+    let streamSucceeded = false
+
+    try {
+      if (hardware.value.webgpu) {
+        await webLlmService.generateStreamingAnswer({
+          userQuery: query,
+          parentChunks: retrievedParents,
+          ontologicalRules: expansion.rulesMatched,
+          onToken: (delta, full) => {
+            tempMsg.content = full
+            assistantResponse = full
+          }
+        })
+        streamSucceeded = true
+      }
+    } catch (llmErr) {
+      console.warn('WebLLM streaming indisponível ou em fallback:', llmErr)
+    }
+
+    // Fallback estruturado de alta precisão se WebLLM não estiver disponível no hardware
+    if (!streamSucceeded || !assistantResponse.trim()) {
+      const formattedRules = ontologyEngine.formatOntologicalRules(expansion.rulesMatched)
+      assistantResponse = `Com base nas evidências extraídas dos documentos da base "${activeKb.value.name}":\n\n` +
         retrievedParents.map((p, i) => `[Evidência ${i + 1} - ${p.sectionTitle}]:\n"${p.content}"`).join('\n\n')
 
       if (expansion.rulesMatched.length > 0) {
-        responseText += `\n\n[Regras Ontológicas Formais Validadas]:\n${formattedRules}`
+        assistantResponse += `\n\n[Regras Ontológicas Formais Validadas]:\n${formattedRules}`
       }
-      responseText += `\n\n(Aviso: Na Fase 4, a síntese textual final será orquestrada via WebLLM em WebGPU com este contexto exato).`
-    } else {
-      responseText = 'Não há informações suficientes na base de conhecimento carregada para responder a esta questão com base nas evidências locais indexadas.'
+      tempMsg.content = assistantResponse
     }
 
-    await chatService.addMessage(kbId, 'assistant', responseText, {
+    // 7. Persiste a mensagem completa no IndexedDB
+    await chatService.addMessage(kbId, 'assistant', assistantResponse, {
       retrievedChunks: retrievedParents,
       rankedChildren: ragResult.rankedChildren,
       ragStats: ragResult.stats,
