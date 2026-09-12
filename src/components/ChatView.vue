@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-[calc(100vh-145px)] bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+  <div class="flex flex-col h-[calc(100dvh-150px)] sm:h-[calc(100vh-140px)] bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
     <!-- Chat Header -->
     <div class="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2.5">
@@ -20,6 +20,28 @@
       </div>
 
       <div class="flex items-center gap-1.5">
+        <!-- Melhoria 3: badge de status do modelo no header -->
+        <div class="hidden sm:flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg border"
+          :class="{
+            'bg-emerald-500/10 text-emerald-400 border-emerald-500/20': llmStatus === 'ready',
+            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20': llmStatus === 'loading' || llmStatus === 'generating',
+            'bg-red-500/10 text-red-400 border-red-500/20': llmStatus === 'error',
+            'bg-slate-800 text-slate-400 border-slate-700': llmStatus === 'idle'
+          }"
+        >
+          <RefreshCw v-if="llmStatus === 'loading' || llmStatus === 'generating'" class="w-3 h-3 animate-spin" />
+          <CheckCircle2 v-else-if="llmStatus === 'ready'" class="w-3 h-3" />
+          <AlertTriangle v-else-if="llmStatus === 'error'" class="w-3 h-3" />
+          <Cpu v-else class="w-3 h-3" />
+          <span>{{
+            llmStatus === 'ready' ? 'Modelo pronto' :
+            llmStatus === 'loading' ? `Carregando ${llmLoadingProgress.progress}%` :
+            llmStatus === 'generating' ? 'Gerando...' :
+            llmStatus === 'error' ? 'Erro no modelo' :
+            'Modelo não carregado'
+          }}</span>
+        </div>
+
         <button
           @click="showPromptPreview = !showPromptPreview"
           class="px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:text-slate-100 text-xs flex items-center gap-1.5 transition"
@@ -37,6 +59,24 @@
           <Trash2 class="w-4 h-4" />
         </button>
       </div>
+    </div>
+
+    <!-- Melhoria 2+3: Banner de carregamento do modelo -->
+    <div v-if="llmStatus === 'loading'" class="px-4 py-3 bg-indigo-950/80 border-b border-indigo-500/20 space-y-1.5">
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-indigo-300 font-medium flex items-center gap-1.5">
+          <RefreshCw class="w-3.5 h-3.5 animate-spin" />
+          Carregando modelo de linguagem na WebGPU...
+        </span>
+        <span class="font-mono text-indigo-200 font-semibold">{{ llmLoadingProgress.progress }}%</span>
+      </div>
+      <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300 rounded-full"
+          :style="{ width: `${llmLoadingProgress.progress}%` }"
+        />
+      </div>
+      <p class="text-[10px] text-slate-500 truncate">{{ llmLoadingProgress.text || 'Compilando shaders WebGPU e carregando pesos quantizados...' }}</p>
     </div>
 
     <!-- Modal/Gaveta de Inspeção do Prompt Anti-Viés -->
@@ -101,63 +141,100 @@ DIRETRIZES OBRIGATÓRIAS:
             ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[85%] sm:max-w-xl text-xs sm:text-sm shadow-md'
             : 'bg-slate-800/80 border border-slate-700/60 text-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[92%] sm:max-w-2xl text-xs sm:text-sm shadow-md'"
         >
+          <!-- Resposta gerada — sempre visível -->
           <div class="whitespace-pre-wrap leading-relaxed">{{ msg.content }}</div>
 
-          <!-- Metadados de Recuperação RAG Híbrido (Dense + BM25 + RRF + Ontology Boost) -->
-          <div v-if="msg.retrievedChunks && msg.retrievedChunks.length > 0" class="mt-3 pt-2.5 border-t border-slate-700/60 text-[11px] text-slate-400">
-            <div class="flex items-center justify-between font-semibold text-indigo-300 mb-1.5">
-              <span class="flex items-center gap-1.5">
-                <Layers class="w-3.5 h-3.5 text-indigo-400" />
-                Fontes Recuperadas (Chunks Pais por RRF):
-              </span>
-              <span v-if="msg.ragStats" class="text-[10px] text-slate-400 font-normal">
-                Busca: {{ msg.ragStats.denseMatches }} densas / {{ msg.ragStats.sparseMatches }} esparsas
-              </span>
-            </div>
+          <!-- Melhoria 1: badge de origem — Gerado pelo LLM ou Fallback Estruturado -->
+          <div
+            v-if="msg.role === 'assistant' && msg.generatedByLlm !== null && msg.generatedByLlm !== undefined"
+            class="mt-2"
+          >
+            <span
+              class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium border"
+              :class="msg.generatedByLlm
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'"
+            >
+              <CheckCircle2 v-if="msg.generatedByLlm" class="w-2.5 h-2.5" />
+              <AlertTriangle v-else class="w-2.5 h-2.5" />
+              {{ msg.generatedByLlm ? 'Gerado pelo modelo (WebLLM)' : 'Fallback estruturado — sem inferência LLM' }}
+            </span>
+          </div>
 
-            <div class="space-y-1.5">
-              <div
-                v-for="(chunk, idx) in msg.retrievedChunks"
-                :key="idx"
-                class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] space-y-1"
-              >
-                <div class="flex items-center justify-between">
-                  <div class="font-medium text-slate-200 flex items-center gap-1.5">
-                    <span class="text-indigo-400">#{{ idx + 1 }}</span>
-                    <span>{{ chunk.sectionTitle || 'Trecho ' + (idx + 1) }}</span>
-                  </div>
-                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
-                    Chunk Pai
-                  </span>
-                </div>
-                <p class="text-slate-300 leading-snug line-clamp-3">{{ chunk.content }}</p>
-              </div>
-            </div>
+          <!-- Botão "Ver fontes" — aparece apenas em mensagens do assistente com chunks -->
+          <div
+            v-if="msg.role === 'assistant' && msg.retrievedChunks && msg.retrievedChunks.length > 0"
+            class="mt-2.5"
+          >
+            <button
+              @click="toggleSources(msg.id)"
+              class="inline-flex items-center gap-1.5 text-[11px] font-medium text-indigo-300 hover:text-indigo-200 transition"
+            >
+              <Layers class="w-3.5 h-3.5" />
+              <span>{{ openSourcesSet.has(msg.id) ? 'Ocultar fontes' : 'Ver fontes' }}</span>
+              <component :is="openSourcesSet.has(msg.id) ? ChevronUp : ChevronDown" class="w-3.5 h-3.5" />
+              <span class="text-slate-500 font-normal ml-0.5">({{ msg.retrievedChunks.length }})</span>
+            </button>
 
-            <!-- Detalhamento dos Chunks Filhos ranqueados por RRF -->
-            <div v-if="msg.rankedChildren && msg.rankedChildren.length > 0" class="mt-2 pt-2 border-t border-slate-800/80">
-              <div class="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 mb-1 flex items-center gap-1">
-                <GitCommit class="w-3 h-3" />
-                Chunks Filhos Ranqueados (RRF Fusão k=60):
+            <!-- Painel de Fontes — colapsável -->
+            <div v-if="openSourcesSet.has(msg.id)" class="mt-2.5 pt-2.5 border-t border-slate-700/60 text-[11px] text-slate-400 space-y-3">
+              <!-- Cabeçalho das fontes -->
+              <div class="flex items-center justify-between font-semibold text-indigo-300">
+                <span class="flex items-center gap-1.5">
+                  <Layers class="w-3.5 h-3.5 text-indigo-400" />
+                  Fontes Recuperadas (Chunks Pais por RRF):
+                </span>
+                <span v-if="msg.ragStats" class="text-[10px] text-slate-400 font-normal">
+                  Busca: {{ msg.ragStats.denseMatches }} densas / {{ msg.ragStats.sparseMatches }} esparsas
+                </span>
               </div>
-              <div class="flex flex-wrap gap-1.5">
+
+              <!-- Lista de Chunks Pais -->
+              <div class="space-y-1.5">
                 <div
-                  v-for="(item, cIdx) in msg.rankedChildren.slice(0, 4)"
-                  :key="cIdx"
-                  class="text-[9px] font-mono px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5"
+                  v-for="(chunk, idx) in msg.retrievedChunks"
+                  :key="idx"
+                  class="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] space-y-1"
                 >
-                  <span class="text-indigo-300 font-semibold">RRF: {{ (item.rrfScore * 1000).toFixed(2) }}</span>
-                  <span v-if="item.denseSimilarity" class="text-emerald-300">Cos: {{ item.denseSimilarity.toFixed(2) }}</span>
-                  <span v-if="item.sparseScore" class="text-amber-300">BM25: {{ item.sparseScore.toFixed(1) }}</span>
-                  <span v-if="item.hasOntologyBoost" class="text-[8px] bg-cyan-500/20 text-cyan-300 px-1 rounded font-bold">
-                    OWL Boost +25%
-                  </span>
+                  <div class="flex items-center justify-between">
+                    <div class="font-medium text-slate-200 flex items-center gap-1.5">
+                      <span class="text-indigo-400">#{{ idx + 1 }}</span>
+                      <span>{{ chunk.sectionTitle || 'Trecho ' + (idx + 1) }}</span>
+                    </div>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+                      Chunk Pai
+                    </span>
+                  </div>
+                  <p class="text-slate-300 leading-snug line-clamp-3">{{ chunk.content }}</p>
+                </div>
+              </div>
+
+              <!-- Detalhamento dos Chunks Filhos ranqueados por RRF -->
+              <div v-if="msg.rankedChildren && msg.rankedChildren.length > 0" class="pt-2 border-t border-slate-800/80">
+                <div class="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 mb-1 flex items-center gap-1">
+                  <GitCommit class="w-3 h-3" />
+                  Chunks Filhos Ranqueados (RRF Fusão k=60):
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <div
+                    v-for="(item, cIdx) in msg.rankedChildren.slice(0, 4)"
+                    :key="cIdx"
+                    class="text-[9px] font-mono px-2 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5"
+                  >
+                    <span class="text-indigo-300 font-semibold">RRF: {{ (item.rrfScore * 1000).toFixed(2) }}</span>
+                    <span v-if="item.denseSimilarity" class="text-emerald-300">Cos: {{ item.denseSimilarity.toFixed(2) }}</span>
+                    <span v-if="item.sparseScore" class="text-amber-300">BM25: {{ item.sparseScore.toFixed(1) }}</span>
+                    <span v-if="item.hasOntologyBoost" class="text-[8px] bg-cyan-500/20 text-cyan-300 px-1 rounded font-bold">
+                      OWL Boost +25%
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
 
       <!-- Loading / Streaming Indicator -->
       <div v-if="isGenerating" class="flex items-center gap-2 text-xs text-indigo-400 bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 max-w-md">
@@ -168,17 +245,22 @@ DIRETRIZES OBRIGATÓRIAS:
 
     <!-- Input Bar -->
     <div class="p-3 sm:p-4 bg-slate-900/90 border-t border-slate-800">
+      <!-- Melhoria 3: aviso amigável enquanto o modelo carrega -->
+      <div v-if="webgpuAvailable && llmStatus === 'loading'" class="mb-2 flex items-center gap-2 text-[11px] text-indigo-300 bg-indigo-500/10 px-3 py-2 rounded-lg border border-indigo-500/20">
+        <RefreshCw class="w-3 h-3 animate-spin shrink-0" />
+        <span>Aguarde — modelo carregando na WebGPU ({{ llmLoadingProgress.progress }}%). Você poderá enviar perguntas em instantes.</span>
+      </div>
       <form @submit.prevent="handleSend" class="flex items-center gap-2">
         <input
           v-model="inputText"
           type="text"
-          placeholder="Digite sua pergunta baseada no conhecimento indexado..."
-          :disabled="isGenerating"
-          class="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+          :placeholder="(webgpuAvailable && llmStatus === 'loading') ? 'Aguardando o modelo carregar...' : 'Digite sua pergunta baseada no conhecimento indexado...'"
+          :disabled="inputBlocked"
+          class="flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition disabled:opacity-60 disabled:cursor-not-allowed"
         />
         <button
           type="submit"
-          :disabled="!inputText.trim() || isGenerating"
+          :disabled="!inputText.trim() || inputBlocked"
           class="p-2.5 sm:px-4 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-indigo-600/20"
         >
           <Send class="w-4 h-4" />
@@ -190,8 +272,8 @@ DIRETRIZES OBRIGATÓRIAS:
 </template>
 
 <script setup>
-import { ref, nextTick, watch } from 'vue'
-import { MessageSquare, ShieldAlert, Sparkles, Send, Layers, Trash2, RefreshCw, GitCommit, X } from '@lucide/vue'
+import { ref, reactive, computed, nextTick, watch } from 'vue'
+import { MessageSquare, ShieldAlert, Sparkles, Send, Layers, Trash2, RefreshCw, GitCommit, X, ChevronDown, ChevronUp, Cpu, AlertTriangle, CheckCircle2 } from '@lucide/vue'
 
 const props = defineProps({
   activeKb: {
@@ -205,14 +287,41 @@ const props = defineProps({
   isGenerating: {
     type: Boolean,
     default: false
+  },
+  llmStatus: {
+    type: String,
+    default: 'idle' // 'idle'|'loading'|'ready'|'generating'|'error'
+  },
+  llmLoadingProgress: {
+    type: Object,
+    default: () => ({ text: '', progress: 0 })
+  },
+  webgpuAvailable: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['send-message', 'clear-history'])
 
+// O envio é bloqueado enquanto o modelo ainda está sendo carregado
+const inputBlocked = computed(() =>
+  props.isGenerating || (props.webgpuAvailable && props.llmStatus === 'loading')
+)
+
 const inputText = ref('')
 const showPromptPreview = ref(false)
 const chatContainerRef = ref(null)
+
+// Controla quais mensagens têm o painel de fontes aberto (por ID de mensagem)
+const openSourcesSet = reactive(new Set())
+function toggleSources(msgId) {
+  if (openSourcesSet.has(msgId)) {
+    openSourcesSet.delete(msgId)
+  } else {
+    openSourcesSet.add(msgId)
+  }
+}
 
 const suggestions = [
   'Qual o resumo dos conceitos encontrados nos documentos?',
@@ -222,7 +331,7 @@ const suggestions = [
 
 function handleSend() {
   const query = inputText.value.trim()
-  if (!query || props.isGenerating) return
+  if (!query || inputBlocked.value) return
   emit('send-message', query)
   inputText.value = ''
   scrollToBottom()

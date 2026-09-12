@@ -10,11 +10,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'coi-serviceworker.js'],
+      includeAssets: ['icon.svg'],
       manifest: {
-        name: 'RAG Híbrido PWA Offline',
-        short_name: 'RAG PWA',
-        description: 'PWA RAG Híbrido Offline com IA de Borda e Ontologias OWL',
+        name: 'EdgeRAG IA Local',
+        short_name: 'EdgeRAG',
+        description: 'RAG Híbrido com processamento de IA direto no dispositivo (Edge AI).',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',

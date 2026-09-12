@@ -9,8 +9,27 @@
     />
 
     <!-- Barra de Navegação de Abas -->
-    <nav class="border-b border-slate-800 bg-slate-900/40 px-4 lg:px-6">
-      <div class="flex items-center gap-1 sm:gap-2 overflow-x-auto py-2">
+    <nav class="border-b border-slate-800 bg-slate-900/40 px-2 sm:px-4 lg:px-6">
+      <!-- Layout Mobile: Segmented control em 4 colunas sem scroll horizontal -->
+      <div class="grid grid-cols-4 gap-1 p-1 bg-slate-900/90 rounded-xl border border-slate-800/80 my-1.5 sm:hidden">
+        <button
+          v-for="tab in navTabs"
+          :key="tab.id"
+          @click="activeTab = tab.id"
+          :class="activeTab === tab.id
+            ? 'bg-indigo-600/25 text-indigo-200 border-indigo-500/40 shadow-sm font-semibold'
+            : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 font-medium'"
+          class="flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5 rounded-lg text-[10px] border transition min-h-[44px]"
+        >
+          <component :is="tab.icon" class="w-3.5 h-3.5 shrink-0" />
+          <span class="truncate w-full text-center leading-tight">
+            {{ tab.shortLabel || tab.label }}
+          </span>
+        </button>
+      </div>
+
+      <!-- Layout Tablet & Desktop: Flex horizontal padrão -->
+      <div class="hidden sm:flex items-center gap-1 sm:gap-2 overflow-x-auto py-2">
         <button
           v-for="tab in navTabs"
           :key="tab.id"
@@ -27,13 +46,16 @@
     </nav>
 
     <!-- Conteúdo Principal -->
-    <main class="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
+    <main class="flex-1 p-2.5 sm:p-4 lg:p-6 max-w-7xl mx-auto w-full">
       <!-- Aba: Chat & RAG -->
       <ChatView
         v-if="activeTab === 'chat'"
         :active-kb="activeKb"
         :messages="messages"
         :is-generating="isGenerating"
+        :llm-status="llmStatus"
+        :llm-loading-progress="llmLoadingProgress"
+        :webgpu-available="hardware.webgpu"
         @send-message="handleSendMessage"
         @clear-history="handleClearHistory"
       />
@@ -98,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { MessageSquare, FileText, Network, Settings } from '@lucide/vue'
 import Header from './components/Header.vue'
 import HardwareBanner from './components/HardwareBanner.vue'
@@ -117,10 +139,10 @@ import { hybridRagEngine } from './services/hybridRag.js'
 import { webLlmService } from './services/webLlm.js'
 
 const navTabs = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'documents', label: 'Documentos', icon: FileText },
-  { id: 'ontology', label: 'Conceitos', icon: Network },
-  { id: 'settings', label: 'Ajustes', icon: Settings }
+  { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
+  { id: 'documents', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
+  { id: 'ontology', label: 'Conceitos', shortLabel: 'Conceitos', icon: Network },
+  { id: 'settings', label: 'Ajustes', shortLabel: 'Ajustes', icon: Settings }
 ]
 
 const activeTab = ref('documents')
@@ -149,6 +171,35 @@ const inspectParents = ref([])
 const inspectChildren = ref([])
 
 const isGenerating = ref(false)
+
+// Estado reativo do WebLLM — sincronizado com callbacks do serviço
+const llmStatus = ref(webLlmService.status)           // 'idle'|'loading'|'ready'|'generating'|'error'
+const llmLoadingProgress = ref(webLlmService.loadingProgress)
+
+/** Inicia o carregamento do modelo, atualizando o estado reativo */
+async function ensureLlmLoaded() {
+  if (!hardware.value.webgpu) return
+  if (llmStatus.value === 'ready' || llmStatus.value === 'loading') return
+
+  llmStatus.value = 'loading'
+  try {
+    await webLlmService.loadModel(webLlmService.currentModelId, (prog) => {
+      llmLoadingProgress.value = prog
+    })
+    llmStatus.value = 'ready'
+  } catch (err) {
+    llmStatus.value = 'error'
+    console.warn('Falha no pré-carregamento do modelo WebLLM:', err)
+  }
+}
+
+// Melhoria 2: pré-carrega o modelo automaticamente ao entrar na aba Chat
+watch(activeTab, (tab) => {
+  if (tab === 'chat') {
+    llmStatus.value = webLlmService.status
+    ensureLlmLoaded()
+  }
+})
 
 onMounted(async () => {
   // 1. Diagnóstico de hardware
@@ -309,6 +360,7 @@ async function handleSendMessage(query) {
       rankedChildren: ragResult.rankedChildren,
       ragStats: ragResult.stats,
       ontologyRulesUsed: expansion.rulesMatched,
+      generatedByLlm: null, // será definido após a geração
       createdAt: Date.now()
     }
     messages.value.push(tempMsg)
@@ -319,6 +371,7 @@ async function handleSendMessage(query) {
 
     try {
       if (hardware.value.webgpu) {
+        llmStatus.value = 'generating'
         await webLlmService.generateStreamingAnswer({
           userQuery: query,
           parentChunks: retrievedParents,
@@ -328,9 +381,11 @@ async function handleSendMessage(query) {
             assistantResponse = full
           }
         })
+        llmStatus.value = 'ready'
         streamSucceeded = true
       }
     } catch (llmErr) {
+      llmStatus.value = hardware.value.webgpu ? 'ready' : llmStatus.value
       console.warn('WebLLM streaming indisponível ou em fallback:', llmErr)
     }
 
@@ -346,12 +401,17 @@ async function handleSendMessage(query) {
       tempMsg.content = assistantResponse
     }
 
+    // Melhoria 1: persiste a flag de origem da resposta junto com a mensagem
+    const generatedByLlm = streamSucceeded && !!assistantResponse.trim()
+    tempMsg.generatedByLlm = generatedByLlm
+
     // 7. Persiste a mensagem completa no IndexedDB
     await chatService.addMessage(kbId, 'assistant', assistantResponse, {
       retrievedChunks: retrievedParents,
       rankedChildren: ragResult.rankedChildren,
       ragStats: ragResult.stats,
-      ontologyRulesUsed: expansion.rulesMatched
+      ontologyRulesUsed: expansion.rulesMatched,
+      generatedByLlm
     })
 
     messages.value = await chatService.getMessagesByKb(kbId)
