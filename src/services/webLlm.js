@@ -1,4 +1,4 @@
-import { CreateMLCEngine } from '@mlc-ai/web-llm'
+import { CreateMLCEngine, prebuiltAppConfig } from '@mlc-ai/web-llm'
 
 /**
  * Serviço de Gerenciamento do SLM de Borda com WebLLM (WebGPU)
@@ -28,6 +28,8 @@ export class WebLlmService {
     this.currentModelId = modelId
     this.errorMessage = null
 
+    const appConfig = { ...prebuiltAppConfig, useIndexedDBCache: true };
+
     try {
       this.engine = await CreateMLCEngine(modelId, {
         initProgressCallback: (report) => {
@@ -37,9 +39,7 @@ export class WebLlmService {
           }
           onProgress?.(this.loadingProgress)
         },
-        appConfig: {
-          useIndexedDBCache: true // Armazena pesos no cache local para inicialização instantânea
-        }
+        appConfig
       })
 
       this.status = 'ready'
