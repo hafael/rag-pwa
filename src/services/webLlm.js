@@ -28,7 +28,7 @@ export class WebLlmService {
     this.currentModelId = modelId
     this.errorMessage = null
 
-    const appConfig = { ...prebuiltAppConfig, useIndexedDBCache: true };
+    const appConfig = { ...prebuiltAppConfig, cacheBackend: "indexeddb" };
 
     try {
       this.engine = await CreateMLCEngine(modelId, {
