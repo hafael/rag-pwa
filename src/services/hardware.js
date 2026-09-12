@@ -19,16 +19,23 @@ export async function checkHardwareCapabilities() {
   // 1. WebGPU check
   if ('gpu' in navigator) {
     try {
-      const adapter = await navigator.gpu.requestAdapter()
+      const adapter = await navigator.gpu.requestAdapter({
+        featureLevel: "compatibility",
+      })
       if (adapter) {
         result.webgpu = true
         // Extrai informações seguras do adaptador
         const info = adapter.info || (await adapter.requestAdapterInfo?.()) || {}
+        const device = (await adapter.requestDevice()) || {};
         result.webgpuDetails = {
           vendor: info.vendor || 'Dispositivo compatível',
           architecture: info.architecture || 'WebGPU padrão',
-          description: info.description || ''
+          description: info.description || '',
+          device: device
         }
+        console.log('WebGPU details:', result)
+      }else {
+        console.warn('Nenhum adaptador WebGPU disponível.', adapter);
       }
     } catch (e) {
       console.warn('WebGPU check falhou:', e)

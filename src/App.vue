@@ -117,10 +117,10 @@ import { hybridRagEngine } from './services/hybridRag.js'
 import { webLlmService } from './services/webLlm.js'
 
 const navTabs = [
-  { id: 'chat', label: 'RAG Chat', icon: MessageSquare },
-  { id: 'documents', label: 'Documentos & Ingestão', icon: FileText },
-  { id: 'ontology', label: 'Ontologias OWL', icon: Network },
-  { id: 'settings', label: 'Modelos & Edge', icon: Settings }
+  { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'documents', label: 'Documentos', icon: FileText },
+  { id: 'ontology', label: 'Conceitos', icon: Network },
+  { id: 'settings', label: 'Ajustes', icon: Settings }
 ]
 
 const activeTab = ref('documents')
