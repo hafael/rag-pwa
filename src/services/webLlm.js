@@ -32,13 +32,13 @@ export class WebLlmService {
    * Define max_tokens seguro de acordo com dispositivo
    */
   computeSafeMaxTokens() {
-    return this.isMobileDevice() ? 256 : 512
+    return this.isMobileDevice() ? 192 : 384
   }
 
   /**
    * Trunca chunks para evitar prompt excessivo e OOM em GPUBuffer.mapAsync
    */
-  truncateParentChunks(parentChunks = [], maxChars = 6000) {
+  truncateParentChunks(parentChunks = [], maxChars = 3500) {
     const out = []
     let used = 0
 
@@ -104,7 +104,7 @@ export class WebLlmService {
     const appConfig = { ...prebuiltAppConfig, cacheBackend: 'cache' }
 
     // Contexto menor em mobile para reduzir pressão de VRAM
-    const contextWindow = this.isMobileDevice() ? 1024 : 2048
+    const contextWindow = this.isMobileDevice() ? 1536 : 3072
 
     try {
       this.engine = await CreateMLCEngine(
