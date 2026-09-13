@@ -19,23 +19,40 @@ export async function checkHardwareCapabilities() {
   // 1. WebGPU check
   if ('gpu' in navigator) {
     try {
-      const adapter = await navigator.gpu.requestAdapter({
-        featureLevel: "compatibility",
-      })
+      const adapter = await navigator.gpu.requestAdapter()
       if (adapter) {
         result.webgpu = true
         // Extrai informações seguras do adaptador
         const info = adapter.info || (await adapter.requestAdapterInfo?.()) || {}
-        const device = (await adapter.requestDevice()) || {};
+        const hasF16 = Boolean(adapter.features?.has('shader-f16'))
+        result.hasF16 = hasF16
+
+        // Testa instanciação de GPUDevice de forma segura e libera imediatamente o contexto
+        let deviceCreated = false
+        try {
+          const probeDevice = await adapter.requestDevice()
+          if (probeDevice) {
+            deviceCreated = true
+            probeDevice.destroy?.()
+          }
+        } catch (deviceErr) {
+          console.warn('Alerta ao instanciar GPUDevice de teste:', deviceErr)
+        }
+
         result.webgpuDetails = {
           vendor: info.vendor || 'Dispositivo compatível',
           architecture: info.architecture || 'WebGPU padrão',
           description: info.description || '',
-          device: device
+          hasF16,
+          deviceCreated,
+          limits: {
+            maxBufferSizeMB: Math.round((adapter.limits?.maxBufferSize || 0) / (1024 * 1024)),
+            maxStorageBufferMB: Math.round((adapter.limits?.maxStorageBufferBindingSize || 0) / (1024 * 1024))
+          }
         }
-        console.log('WebGPU details:', result)
-      }else {
-        console.warn('Nenhum adaptador WebGPU disponível.', adapter);
+        console.log('WebGPU capabilities detectadas:', result.webgpuDetails)
+      } else {
+        console.warn('Nenhum adaptador WebGPU disponível.')
       }
     } catch (e) {
       console.warn('WebGPU check falhou:', e)

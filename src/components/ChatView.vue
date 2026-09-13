@@ -7,10 +7,10 @@
           <MessageSquare class="w-4 h-4" />
         </div>
         <div>
-          <h3 class="text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-2">
+          <h3 class="text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-1.5 sm:gap-2">
             RAG Chat
-            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-              Llama-3.2-1B-Instruct
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 truncate max-w-[120px] sm:max-w-none">
+              {{ activeModelShortName }}
             </span>
           </h3>
           <p class="text-[11px] text-slate-400">
@@ -20,8 +20,8 @@
       </div>
 
       <div class="flex items-center gap-1.5">
-        <!-- Melhoria 3: badge de status do modelo no header -->
-        <div class="hidden sm:flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg border"
+        <!-- Badge de status do modelo no header - responsivo e visível no mobile -->
+        <div class="flex items-center gap-1 sm:gap-1.5 text-[10px] px-1.5 sm:px-2 py-1 rounded-lg border max-w-[120px] sm:max-w-none"
           :class="{
             'bg-emerald-500/10 text-emerald-400 border-emerald-500/20': llmStatus === 'ready',
             'bg-indigo-500/10 text-indigo-400 border-indigo-500/20': llmStatus === 'loading' || llmStatus === 'generating',
@@ -29,16 +29,16 @@
             'bg-slate-800 text-slate-400 border-slate-700': llmStatus === 'idle'
           }"
         >
-          <RefreshCw v-if="llmStatus === 'loading' || llmStatus === 'generating'" class="w-3 h-3 animate-spin" />
-          <CheckCircle2 v-else-if="llmStatus === 'ready'" class="w-3 h-3" />
-          <AlertTriangle v-else-if="llmStatus === 'error'" class="w-3 h-3" />
-          <Cpu v-else class="w-3 h-3" />
-          <span>{{
+          <RefreshCw v-if="llmStatus === 'loading' || llmStatus === 'generating'" class="w-3 h-3 animate-spin shrink-0" />
+          <CheckCircle2 v-else-if="llmStatus === 'ready'" class="w-3 h-3 shrink-0" />
+          <AlertTriangle v-else-if="llmStatus === 'error'" class="w-3 h-3 shrink-0" />
+          <Cpu v-else class="w-3 h-3 shrink-0" />
+          <span class="truncate">{{
             llmStatus === 'ready' ? 'Modelo pronto' :
             llmStatus === 'loading' ? `Carregando ${llmLoadingProgress.progress}%` :
             llmStatus === 'generating' ? 'Gerando...' :
             llmStatus === 'error' ? 'Erro no modelo' :
-            'Modelo não carregado'
+            'Não carregado'
           }}</span>
         </div>
 
@@ -76,7 +76,25 @@
           :style="{ width: `${llmLoadingProgress.progress}%` }"
         />
       </div>
-      <p class="text-[10px] text-slate-500 truncate">{{ llmLoadingProgress.text || 'Compilando shaders WebGPU e carregando pesos quantizados...' }}</p>
+    </div>
+
+    <!-- Banner de Alerta se o Modelo Falhar ou não carregar na WebGPU -->
+    <div v-if="llmStatus === 'error'" class="px-4 py-2.5 bg-red-950/80 border-b border-red-500/30 text-xs text-red-200 flex items-center justify-between gap-2 animate-fade-in">
+      <div class="flex items-center gap-2 min-w-0">
+        <AlertTriangle class="w-4 h-4 text-red-400 shrink-0" />
+        <div class="truncate">
+          <span class="font-semibold">WebLLM indisponível: </span>
+          <span class="text-red-300 font-mono text-[11px]">{{ llmErrorMessage || 'Falha ao inicializar na WebGPU local.' }}</span>
+        </div>
+      </div>
+      <button
+        @click="$emit('retry-load-llm')"
+        class="px-2.5 py-1 bg-red-800/60 hover:bg-red-700/60 text-white rounded-lg text-[11px] font-medium shrink-0 border border-red-500/40 transition flex items-center gap-1"
+        title="Tentar recarregar o modelo na WebGPU"
+      >
+        <RefreshCw class="w-3 h-3" />
+        <span>Recarregar</span>
+      </button>
     </div>
 
     <!-- Modal/Gaveta de Inspeção do Prompt Anti-Viés -->
@@ -147,7 +165,7 @@ DIRETRIZES OBRIGATÓRIAS:
           <!-- Melhoria 1: badge de origem — Gerado pelo LLM ou Fallback Estruturado -->
           <div
             v-if="msg.role === 'assistant' && msg.generatedByLlm !== null && msg.generatedByLlm !== undefined"
-            class="mt-2"
+            class="mt-2 flex items-center gap-1.5 flex-wrap"
           >
             <span
               class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium border"
@@ -158,6 +176,13 @@ DIRETRIZES OBRIGATÓRIAS:
               <CheckCircle2 v-if="msg.generatedByLlm" class="w-2.5 h-2.5" />
               <AlertTriangle v-else class="w-2.5 h-2.5" />
               {{ msg.generatedByLlm ? 'Gerado pelo modelo (WebLLM)' : 'Fallback estruturado — sem inferência LLM' }}
+            </span>
+            <span
+              v-if="!msg.generatedByLlm && msg.fallbackReason"
+              class="text-[10px] text-amber-300/80 font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 max-w-full truncate"
+              :title="msg.fallbackReason"
+            >
+              Motivo: {{ msg.fallbackReason }}
             </span>
           </div>
 
@@ -299,10 +324,25 @@ const props = defineProps({
   webgpuAvailable: {
     type: Boolean,
     default: false
+  },
+  currentModelId: {
+    type: String,
+    default: ''
+  },
+  llmErrorMessage: {
+    type: String,
+    default: ''
   }
 })
 
-const emit = defineEmits(['send-message', 'clear-history'])
+const emit = defineEmits(['send-message', 'clear-history', 'retry-load-llm'])
+
+// Nome amigável curto para exibição no cabeçalho do chat
+const activeModelShortName = computed(() => {
+  if (!props.currentModelId) return 'Llama-3.2-1B'
+  const match = props.currentModelId.match(/^([a-zA-Z0-9.-]+?)(?:-[qQ]\d[a-zA-Z0-9_]+)?(?:-MLC)?$/)
+  return match ? match[1] : props.currentModelId
+})
 
 // O envio é bloqueado enquanto o modelo ainda está sendo carregado
 const inputBlocked = computed(() =>

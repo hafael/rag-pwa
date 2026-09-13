@@ -84,11 +84,19 @@
           class="p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between"
         >
           <div>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-1 flex-wrap">
               <span class="text-xs font-bold text-slate-200">{{ model.name }}</span>
-              <span v-if="model.recommended" class="text-[9px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded">
-                Padrão
-              </span>
+              <div class="flex items-center gap-1">
+                <span v-if="model.isF32" class="text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded">
+                  Mobile / f32
+                </span>
+                <span v-else class="text-[9px] font-semibold bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded">
+                  Requer f16
+                </span>
+                <span v-if="model.recommended" class="text-[9px] font-semibold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded">
+                  Padrão
+                </span>
+              </div>
             </div>
             <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">{{ model.description }}</p>
           </div>
@@ -148,6 +156,13 @@ import { ref, computed } from 'vue'
 import { Settings, Cpu, Layers, HardDrive, Trash2, RefreshCw, Play, AlertCircle } from '@lucide/vue'
 import { webLlmService } from '../services/webLlm.js'
 
+const props = defineProps({
+  hardware: {
+    type: Object,
+    default: () => ({})
+  }
+})
+
 const selectedModel = ref(webLlmService.currentModelId)
 const llmStatus = ref(webLlmService.status)
 const loadingProgress = ref(webLlmService.loadingProgress)
@@ -155,31 +170,43 @@ const errorMessage = ref(null)
 
 const supportedModels = [
   {
-    id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
-    name: 'Qwen2.5-1.5B-Instruct',
-    description: 'Perfil Leve / Mobile. Boa performance em raciocínio lógico e compreensão de contexto.',
-    vram: '~1.6 GB',
+    id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+    name: 'Llama-3.2-1B-Instruct (f32)',
+    description: 'Recomendado para Mobile/Android. Executa em precisão 32-bit sem necessitar de shader-f16. Muito ágil e estável.',
+    vram: '~1.1 GB',
+    isF32: true,
     recommended: true
   },
   {
+    id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
+    name: 'Qwen2.5-1.5B-Instruct (f32)',
+    description: 'Excelente capacidade analítica e raciocínio ontológico, compatível com GPUs móveis e desktops.',
+    vram: '~1.8 GB',
+    isF32: true,
+    recommended: false
+  },
+  {
+    id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC',
+    name: 'Qwen2.5-0.5B-Instruct (f32)',
+    description: 'Perfil Ultra Leve para celulares ou conexões lentas. Download menor que 600MB e resposta instantânea.',
+    vram: '~1.0 GB',
+    isF32: true,
+    recommended: false
+  },
+  {
     id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-    name: 'Llama-3.2-1B-Instruct',
-    description: 'Perfil Leve / Mobile. Menor uso de recursos e carregamento ágil no navegador.',
-    vram: '~1.5 GB',
+    name: 'Llama-3.2-1B-Instruct (f16)',
+    description: 'Menor consumo de memória em computadores e laptops com suporte nativo a shader-f16.',
+    vram: '~880 MB',
+    isF32: false,
     recommended: false
   },
   {
-    id: 'Phi-3.5-mini-instruct-q4f16_1-MLC',
-    name: 'Phi-3.5-mini-instruct',
-    description: 'Perfil Equilibrado. Excelente raciocínio lógico e adesão estrita ao contexto.',
-    vram: '~2.5 GB',
-    recommended: false
-  },
-  {
-    id: 'DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC',
-    name: 'DeepSeek-R1-Distill-1.5B',
-    description: 'Alta Precisão. Especializado em raciocínio encadeado passo a passo.',
-    vram: '~2.0 GB',
+    id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    name: 'Qwen2.5-1.5B-Instruct (f16)',
+    description: 'Perfil completo para desktops com placas dedicadas (requer suporte à extensão shader-f16).',
+    vram: '~1.6 GB',
+    isF32: false,
     recommended: false
   }
 ]

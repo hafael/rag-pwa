@@ -8,6 +8,36 @@ if (typeof sessionStorage !== 'undefined') {
   sessionStorage.removeItem('coi_reload_attempt')
 }
 
+// Wrapper global para WebGPU: garante compatibilidade em navegadores mobile (ex: Chrome no Android / Samsung)
+// Se o requestAdapter padrão retornar null, tenta automaticamente com featureLevel: "compatibility"
+if (typeof navigator !== 'undefined' && navigator.gpu && typeof navigator.gpu.requestAdapter === 'function') {
+  const originalRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu)
+  navigator.gpu.requestAdapter = async function (options = {}) {
+    try {
+      const adapter = await originalRequestAdapter(options)
+      if (adapter) return adapter
+    } catch (_) {
+      // Ignora erro inicial para tentar fallback de compatibilidade
+    }
+
+    if (!options?.featureLevel) {
+      try {
+        const compatAdapter = await originalRequestAdapter({
+          ...options,
+          featureLevel: 'compatibility'
+        })
+        if (compatAdapter) {
+          console.info('[WebGPU] Adaptador inicializado com sucesso via featureLevel: "compatibility"')
+          return compatAdapter
+        }
+      } catch (compatErr) {
+        console.warn('[WebGPU] Falha ao solicitar adaptador em compatibility mode:', compatErr)
+      }
+    }
+    return null
+  }
+}
+
 // Registra o Service Worker único do PWA
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {

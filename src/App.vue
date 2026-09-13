@@ -56,8 +56,11 @@
         :llm-status="llmStatus"
         :llm-loading-progress="llmLoadingProgress"
         :webgpu-available="hardware.webgpu"
+        :current-model-id="webLlmService.currentModelId"
+        :llm-error-message="llmErrorMessage"
         @send-message="handleSendMessage"
         @clear-history="handleClearHistory"
+        @retry-load-llm="ensureLlmLoaded(true)"
       />
 
       <!-- Aba: Documentos & Ingestão -->
@@ -81,6 +84,7 @@
       <!-- Aba: Configurações & Hardware -->
       <SettingsView
         v-else-if="activeTab === 'settings'"
+        :hardware="hardware"
       />
     </main>
 
@@ -175,20 +179,24 @@ const isGenerating = ref(false)
 // Estado reativo do WebLLM — sincronizado com callbacks do serviço
 const llmStatus = ref(webLlmService.status)           // 'idle'|'loading'|'ready'|'generating'|'error'
 const llmLoadingProgress = ref(webLlmService.loadingProgress)
+const llmErrorMessage = ref(webLlmService.errorMessage)
 
 /** Inicia o carregamento do modelo, atualizando o estado reativo */
-async function ensureLlmLoaded() {
+async function ensureLlmLoaded(force = false) {
   if (!hardware.value.webgpu) return
-  if (llmStatus.value === 'ready' || llmStatus.value === 'loading') return
+  if (!force && (llmStatus.value === 'ready' || llmStatus.value === 'loading')) return
 
   llmStatus.value = 'loading'
+  llmErrorMessage.value = null
   try {
     await webLlmService.loadModel(webLlmService.currentModelId, (prog) => {
       llmLoadingProgress.value = prog
     })
     llmStatus.value = 'ready'
+    llmErrorMessage.value = null
   } catch (err) {
     llmStatus.value = 'error'
+    llmErrorMessage.value = err.message || 'Falha ao inicializar o modelo WebLLM'
     console.warn('Falha no pré-carregamento do modelo WebLLM:', err)
   }
 }
@@ -197,6 +205,7 @@ async function ensureLlmLoaded() {
 watch(activeTab, (tab) => {
   if (tab === 'chat') {
     llmStatus.value = webLlmService.status
+    llmErrorMessage.value = webLlmService.errorMessage
     ensureLlmLoaded()
   }
 })
@@ -204,6 +213,11 @@ watch(activeTab, (tab) => {
 onMounted(async () => {
   // 1. Diagnóstico de hardware
   hardware.value = await checkHardwareCapabilities()
+
+  // Se o dispositivo não suportar shader-f16 (como Samsung/Android Chrome), define modelo f32 compatível
+  if (hardware.value.webgpu && !hardware.value.hasF16) {
+    webLlmService.currentModelId = 'Llama-3.2-1B-Instruct-q4f32_1-MLC'
+  }
 
   // 2. Carrega bases salvas
   await reloadKnowledgeBases()
@@ -368,6 +382,7 @@ async function handleSendMessage(query) {
     // 6. Tentativa de inferência local via WebLLM com streaming de tokens na WebGPU
     let assistantResponse = ''
     let streamSucceeded = false
+    let failureReason = null
 
     try {
       if (hardware.value.webgpu) {
@@ -382,10 +397,13 @@ async function handleSendMessage(query) {
           }
         })
         llmStatus.value = 'ready'
+        llmErrorMessage.value = null
         streamSucceeded = true
       }
     } catch (llmErr) {
-      llmStatus.value = hardware.value.webgpu ? 'ready' : llmStatus.value
+      failureReason = llmErr.message || String(llmErr)
+      llmStatus.value = 'error'
+      llmErrorMessage.value = failureReason
       console.warn('WebLLM streaming indisponível ou em fallback:', llmErr)
     }
 
@@ -404,6 +422,7 @@ async function handleSendMessage(query) {
     // Melhoria 1: persiste a flag de origem da resposta junto com a mensagem
     const generatedByLlm = streamSucceeded && !!assistantResponse.trim()
     tempMsg.generatedByLlm = generatedByLlm
+    tempMsg.fallbackReason = generatedByLlm ? null : failureReason
 
     // 7. Persiste a mensagem completa no IndexedDB
     await chatService.addMessage(kbId, 'assistant', assistantResponse, {
@@ -411,7 +430,8 @@ async function handleSendMessage(query) {
       rankedChildren: ragResult.rankedChildren,
       ragStats: ragResult.stats,
       ontologyRulesUsed: expansion.rulesMatched,
-      generatedByLlm
+      generatedByLlm,
+      fallbackReason: generatedByLlm ? null : failureReason
     })
 
     messages.value = await chatService.getMessagesByKb(kbId)

@@ -33,9 +33,20 @@
               {{ hardware.webgpu ? 'Compatível & Ativo' : 'Não Detectado' }}
             </span>
           </div>
-          <p v-if="hardware.webgpuDetails" class="text-xs text-slate-400 mt-2">
-            Dispositivo: <span class="text-slate-300 font-mono">{{ hardware.webgpuDetails.vendor }} ({{ hardware.webgpuDetails.architecture }})</span>
-          </p>
+          <div v-if="hardware.webgpuDetails" class="mt-2 space-y-1 text-xs text-slate-400">
+            <p>
+              Dispositivo: <span class="text-slate-300 font-mono">{{ hardware.webgpuDetails.vendor }} ({{ hardware.webgpuDetails.architecture }})</span>
+            </p>
+            <p class="flex items-center gap-1.5 flex-wrap">
+              <span>Extensão Float16 (shader-f16):</span>
+              <span
+                class="px-1.5 py-0.5 rounded text-[11px] font-medium"
+                :class="hardware.webgpuDetails.hasF16 ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'"
+              >
+                {{ hardware.webgpuDetails.hasF16 ? 'Suportado (f16 ativo)' : 'Indisponível (usando modelos f32 compatíveis com mobile)' }}
+              </span>
+            </p>
+          </div>
           <p v-else-if="!hardware.webgpu" class="text-xs text-amber-300/80 mt-2">
             Atenção: O WebLLM necessita de um navegador com WebGPU habilitado (Chrome 113+, Edge 113+ ou Safari 18+).
           </p>
