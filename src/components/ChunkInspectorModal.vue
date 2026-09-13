@@ -9,7 +9,7 @@
           </div>
           <div>
             <h3 class="text-base font-semibold text-slate-100">
-              Inspetor de Chunks Parent-Child
+              Inspetor de chunks Parent-Child
             </h3>
             <p class="text-xs text-slate-400">
               Documento: <span class="text-indigo-300 font-medium">{{ document?.fileName }}</span>
@@ -40,7 +40,7 @@
           <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
             <div class="flex items-center gap-2">
               <span class="text-xs font-bold text-indigo-400">
-                Chunk Pai #{{ pIdx + 1 }}: {{ parent.sectionTitle }}
+                Chunk pai #{{ pIdx + 1 }}: {{ parent.sectionTitle }}
               </span>
               <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
                 Contexto para o SLM
@@ -60,7 +60,7 @@
           <div class="pt-2">
             <div class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <GitCommit class="w-3.5 h-3.5" />
-              Chunks Filhos Vinculados (Indexação & Busca Vetorial):
+              Chunks filhos vinculados (indexação & busca vetorial):
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">

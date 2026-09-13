@@ -1,4 +1,4 @@
-# RAG Híbrido PWA — Edge AI & Ontologias OWL
+# EdgeRAG - RAG Híbrido — Edge AI & Ontologias
 
 Uma aplicação web progressiva (PWA) de Recuperação Aumentada por Recuperação (RAG Híbrido) operando inteiramente **client-side (Edge AI)**, sem dependência de servidores externos, APIs pagas ou nuvem.
 

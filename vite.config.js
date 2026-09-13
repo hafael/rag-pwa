@@ -12,7 +12,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'EdgeRAG IA Local',
+        name: 'EdgeRAG AI',
         short_name: 'EdgeRAG',
         description: 'RAG Híbrido com processamento de IA direto no dispositivo (Edge AI).',
         theme_color: '#0f172a',

@@ -28,7 +28,7 @@
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
           <Sparkles class="w-4 h-4" />
-          Simulador de Query Expansion (Seção 4.2 do Plano)
+          Simulador de Query Expansion
         </h3>
         <span class="text-[11px] text-slate-500">Expansão de termos via Grafo</span>
       </div>
@@ -53,7 +53,7 @@
 
       <!-- Resultado da Expansão -->
       <div v-if="expansionResult" class="mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-cyan-500/20 text-xs">
-        <div class="font-semibold text-cyan-300 mb-1">Consulta Enriquecida com Sucesso:</div>
+        <div class="font-semibold text-cyan-300 mb-1">Consulta enriquecida com sucesso:</div>
         <p class="text-slate-200 font-mono text-[11px] bg-slate-900 p-2.5 rounded-lg border border-slate-800">
           {{ expansionResult }}
         </p>
@@ -64,7 +64,7 @@
     <div class="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
       <div class="p-4 border-b border-slate-800/80 flex items-center justify-between">
         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">
-          Triplas e Relações Ontológicas Indexadas
+          Triplas e relações ontológicas indexadas
         </h3>
         <span class="text-xs text-slate-500">{{ triples.length }} tripla(s)</span>
       </div>

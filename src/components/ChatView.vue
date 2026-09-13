@@ -8,13 +8,13 @@
         </div>
         <div>
           <h3 class="text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-1.5 sm:gap-2">
-            RAG Chat
+            Chat
             <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 truncate max-w-[120px] sm:max-w-none">
               {{ activeModelShortName }}
             </span>
           </h3>
           <p class="text-[11px] text-slate-400">
-            BC: <span class="text-slate-300 font-medium">{{ activeKb?.name || 'Nenhuma selecionada' }}</span>
+            Base: <span class="text-slate-300 font-medium">{{ activeKb?.name || 'Nenhuma selecionada' }}</span>
           </p>
         </div>
       </div>
@@ -66,7 +66,7 @@
       <div class="flex items-center justify-between text-xs">
         <span class="text-indigo-300 font-medium flex items-center gap-1.5">
           <RefreshCw class="w-3.5 h-3.5 animate-spin" />
-          Carregando modelo de linguagem na WebGPU...
+          Carregando modelo de linguagem...
         </span>
         <span class="font-mono text-indigo-200 font-semibold">{{ llmLoadingProgress.progress }}%</span>
       </div>
@@ -102,7 +102,7 @@
       <div class="flex items-center justify-between mb-2">
         <span class="font-semibold text-amber-400 flex items-center gap-1.5">
           <ShieldAlert class="w-4 h-4" />
-          Template Formal de Prevenção a Alucinações (Seção 7 do Plano)
+          Instrução de prevenção a alucinações
         </span>
         <button @click="showPromptPreview = false" class="text-slate-400 hover:text-slate-200">
           <X class="w-4 h-4" />
@@ -128,7 +128,7 @@ DIRETRIZES OBRIGATÓRIAS:
         </div>
         <h4 class="text-sm font-semibold text-slate-300">Assistente de pesquisa</h4>
         <p class="text-xs text-slate-500 max-w-md mt-1 mb-4">
-          Faça perguntas sobre os documentos indexados na base "{{ activeKb?.name || 'padrão' }}". O motor utilizará busca híbrida (Dense + Sparse BM25 + Ontologias) baseada em IA totalmente no seu dispositivo. Nenhum documento ou parte é enviada para processamento externo em servidor remoto.
+          Faça perguntas sobre os documentos indexados na base "{{ activeKb?.name || 'padrão' }}". O motor de busca utilizará IA totalmente no seu dispositivo. Nenhum documento ou parte é enviada para processamento externo em servidor remoto.
         </p>
         <div class="flex flex-wrap gap-2 justify-center max-w-lg">
           <button
@@ -264,7 +264,7 @@ DIRETRIZES OBRIGATÓRIAS:
       <!-- Loading / Streaming Indicator -->
       <div v-if="isGenerating" class="flex items-center gap-2 text-xs text-indigo-400 bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 max-w-md">
         <RefreshCw class="w-3.5 h-3.5 animate-spin" />
-        <span>Consultando vetores e executando inferência no WebLLM...</span>
+        <span>Consultando vetores e executando inferência no modelo de linguagem...</span>
       </div>
     </div>
 
@@ -273,7 +273,7 @@ DIRETRIZES OBRIGATÓRIAS:
       <!-- Melhoria 3: aviso amigável enquanto o modelo carrega -->
       <div v-if="webgpuAvailable && llmStatus === 'loading'" class="mb-2 flex items-center gap-2 text-[11px] text-indigo-300 bg-indigo-500/10 px-3 py-2 rounded-lg border border-indigo-500/20">
         <RefreshCw class="w-3 h-3 animate-spin shrink-0" />
-        <span>Aguarde — modelo carregando na WebGPU ({{ llmLoadingProgress.progress }}%). Você poderá enviar perguntas em instantes.</span>
+        <span>Aguarde — carregando modelo na WebGPU do dispositivo ({{ llmLoadingProgress.progress }}%). Você poderá enviar perguntas em instantes.</span>
       </div>
       <form @submit.prevent="handleSend" class="flex items-center gap-2">
         <input

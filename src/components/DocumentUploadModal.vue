@@ -57,7 +57,7 @@
         <!-- Estratégia de Chunking (Parent-Child Pattern) -->
         <div v-if="!isOntologyFile">
           <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-            Estratégia de Chunking (Padrão Parent-Child)
+            Estratégia de chunking (padrão Parent-Child)
           </label>
           <div class="grid grid-cols-2 gap-2">
             <button
@@ -83,7 +83,7 @@
         <div v-else class="p-3 rounded-xl border border-cyan-500/30 bg-cyan-500/10 flex items-start gap-2.5">
           <Network class="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
           <div class="text-xs">
-            <span class="font-semibold text-cyan-300">Arquivo Ontológico Detectado</span>
+            <span class="font-semibold text-cyan-300">Ontologia detectada</span>
             <p class="text-slate-300 mt-0.5">
               Este arquivo será processado via engine N3.js para extrair Classes, Subclasses e Triplas de domínio para expansão semântica e anti-viés.
             </p>

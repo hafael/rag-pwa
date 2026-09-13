@@ -8,7 +8,7 @@
             <Cpu class="w-5 h-5" />
           </div>
           <div>
-            <h3 class="text-base font-semibold text-slate-100">Diagnóstico de Hardware & Edge AI</h3>
+            <h3 class="text-base font-semibold text-slate-100">Diagnóstico de Hardware</h3>
             <p class="text-xs text-slate-400">Verificação de aceleração local e persistência</p>
           </div>
         </div>

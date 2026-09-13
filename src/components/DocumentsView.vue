@@ -38,7 +38,7 @@
         <div class="text-xl font-bold text-cyan-400 mt-1">{{ stats.childCount }}</div>
       </div>
       <div class="p-4 rounded-xl border border-slate-800/80 bg-slate-900/40">
-        <span class="text-[11px] font-medium text-slate-400">Triplas OWL Ativas</span>
+        <span class="text-[11px] font-medium text-slate-400">Triplas Semânticas Ativas</span>
         <div class="text-xl font-bold text-emerald-400 mt-1">{{ stats.tripleCount }}</div>
       </div>
     </div>
@@ -46,7 +46,7 @@
     <!-- Lista de Documentos -->
     <div class="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
       <div class="p-4 border-b border-slate-800/80 flex items-center justify-between">
-        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Documentos Indexados</h3>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Documentos indexados</h3>
         <span class="text-xs text-slate-500">{{ documents.length }} arquivo(s)</span>
       </div>
 
