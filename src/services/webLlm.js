@@ -22,6 +22,42 @@ export class WebLlmService {
   }
 
   /**
+   * Detecta ambiente mobile (heurística simples)
+   */
+  isMobileDevice() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+  }
+
+  /**
+   * Define max_tokens seguro de acordo com dispositivo
+   */
+  computeSafeMaxTokens() {
+    return this.isMobileDevice() ? 256 : 512
+  }
+
+  /**
+   * Trunca chunks para evitar prompt excessivo e OOM em GPUBuffer.mapAsync
+   */
+  truncateParentChunks(parentChunks = [], maxChars = 6000) {
+    const out = []
+    let used = 0
+
+    for (const p of parentChunks || []) {
+      const content = (p?.content || '').trim()
+      if (!content) continue
+
+      const remaining = maxChars - used
+      if (remaining <= 0) break
+
+      const clipped = content.slice(0, remaining)
+      out.push({ ...p, content: clipped })
+      used += clipped.length
+    }
+
+    return out
+  }
+
+  /**
    * Resolve o ID do modelo considerando o suporte a shader-f16 do hardware local
    */
   async resolveCompatibleModelId(targetModelId) {
@@ -65,22 +101,29 @@ export class WebLlmService {
     this.errorMessage = null
 
     // Cache API é o backend primário mais estável em navegadores mobile/PWA
-    const appConfig = { ...prebuiltAppConfig, cacheBackend: "cache" };
+    const appConfig = { ...prebuiltAppConfig, cacheBackend: 'cache' }
+
+    // Contexto menor em mobile para reduzir pressão de VRAM
+    const contextWindow = this.isMobileDevice() ? 1024 : 2048
 
     try {
-      this.engine = await CreateMLCEngine(resolvedModelId, {
-        initProgressCallback: (report) => {
-          this.loadingProgress = {
-            text: report.text,
-            progress: Math.round((report.progress || 0) * 100)
-          }
-          onProgress?.(this.loadingProgress)
+      this.engine = await CreateMLCEngine(
+        resolvedModelId,
+        {
+          initProgressCallback: (report) => {
+            this.loadingProgress = {
+              text: report.text,
+              progress: Math.round((report.progress || 0) * 100)
+            }
+            onProgress?.(this.loadingProgress)
+          },
+          appConfig
         },
-        appConfig
-      }, {
-        // Reduz o KV Cache de 4096 para 2048 para evitar estouro de VRAM em GPUs mobile unificadas
-        context_window_size: 2048
-      })
+        {
+          // Redução de janela para maior estabilidade em GPUs móveis
+          context_window_size: contextWindow
+        }
+      )
 
       this.status = 'ready'
       this.errorMessage = null
@@ -106,11 +149,11 @@ export class WebLlmService {
       : 'Nenhum contexto textual relevante encontrado na base.'
 
     return `[SISTEMA: MODO DE RESPOSTA ESTRITO E SEM ALUCINAÇÕES]
-Você é um assistente de inteligência artificial de precisão. Sua tarefa é responder à pergunta do usuário utilizando EXCLUSIVAMENTE as evidências textuais fornecidas na seção CONTEXTO e as regras formais contidas na seção REGRAS ONTOLÓGICAS.
+Você é um assistente de inteligência artificial de precisão. Sua tarefa é responder à pergunta do usuário utilizando EXCLUSIVAMENTE as evidências textuais fornecidas na seção CONTEXTO e as regras ontológicas definidas.
 
 DIRETRIZES OBRIGATÓRIAS:
 1. Responda APENAS com base nos fatos explicitados no CONTEXTO. Não utilize conhecimentos prévios externos.
-2. Se o CONTEXTO não contiver dados suficientes para responder totalmente à pergunta, declare explicitamente: "Não há informações suficientes na base de conhecimento carregada para responder a esta questão."
+2. Se o CONTEXTO não contiver dados suficientes para responder totalmente à pergunta, declare explicitamente: "Não há informações suficientes na base de conhecimento carregada para responder a esta pergunta."
 3. Respeite estritamente os conceitos e equivalências definidos nas REGRAS ONTOLÓGICAS.
 4. Mantenha um tom neutro, objetivo e direto, sem especulações ou deduções não suportadas pelo texto.
 5. Responda em língua portuguesa com clareza.
@@ -137,9 +180,12 @@ ${contextText}`
       await this.loadModel(this.currentModelId, onProgress)
     }
 
+    // Limita contexto para reduzir risco de OOM
+    const safeChunks = this.truncateParentChunks(parentChunks, 6000)
+
     const systemPrompt = this.buildStrictSystemPrompt({
       ontologicalRules,
-      parentChunks
+      parentChunks: safeChunks
     })
 
     this.status = 'generating'
@@ -152,7 +198,7 @@ ${contextText}`
         ],
         stream: true,
         temperature: 0.1, // Temperatura baixa para máxima determinação e mitigação de alucinações
-        max_tokens: 1024
+        max_tokens: this.computeSafeMaxTokens()
       })
 
       let fullResponse = ''
@@ -167,6 +213,54 @@ ${contextText}`
       this.status = 'ready'
       return fullResponse
     } catch (err) {
+      const msg = String(err?.message || err || '')
+      const isGpuOom =
+        msg.includes('mapAsync') ||
+        msg.toLowerCase().includes('out of memory') ||
+        msg.toLowerCase().includes('allocation')
+
+      if (isGpuOom) {
+        console.warn('[WebLLM] OOM detectado. Recarregando engine e tentando novamente com parâmetros reduzidos...')
+
+        try {
+          await this.unload()
+          await this.loadModel(this.currentModelId, onProgress)
+
+          const retryPrompt = this.buildStrictSystemPrompt({
+            ontologicalRules,
+            parentChunks: this.truncateParentChunks(parentChunks, 3500)
+          })
+
+          const fallbackCompletion = await this.engine.chat.completions.create({
+            messages: [
+              { role: 'system', content: retryPrompt },
+              { role: 'user', content: userQuery }
+            ],
+            stream: true,
+            temperature: 0.1,
+            max_tokens: 192
+          })
+
+          let fullResponse = ''
+          for await (const chunk of fallbackCompletion) {
+            const delta = chunk.choices[0]?.delta?.content || ''
+            if (delta) {
+              fullResponse += delta
+              onToken?.(delta, fullResponse)
+            }
+          }
+
+          this.status = 'ready'
+          this.errorMessage = null
+          return fullResponse
+        } catch (retryErr) {
+          this.status = 'error'
+          this.errorMessage = retryErr.message || 'Erro durante retry após OOM na WebGPU'
+          console.error('Falha no retry de geração WebLLM:', retryErr)
+          throw retryErr
+        }
+      }
+
       this.status = 'error'
       this.errorMessage = err.message || 'Erro durante a inferência na WebGPU'
       console.error('Falha na geração de resposta WebLLM:', err)
