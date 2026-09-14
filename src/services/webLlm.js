@@ -104,7 +104,7 @@ export class WebLlmService {
     const appConfig = { ...prebuiltAppConfig, cacheBackend: 'cache' }
 
     // Contexto menor em mobile para reduzir pressão de VRAM
-    const contextWindow = this.isMobileDevice() ? 2048 : 3072
+    const contextWindow = this.isMobileDevice() ? 3072 : 2048
 
     try {
       this.engine = await CreateMLCEngine(
