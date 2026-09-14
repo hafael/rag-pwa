@@ -38,7 +38,7 @@ export class WebLlmService {
   /**
    * Trunca chunks para evitar prompt excessivo e OOM em GPUBuffer.mapAsync
    */
-  truncateParentChunks(parentChunks = [], maxChars = 1024) {
+  truncateParentChunks(parentChunks = [], maxChars = 512) {
     const out = []
     let used = 0
 
@@ -181,7 +181,7 @@ ${contextText}`
     }
 
     // Limita contexto para reduzir risco de OOM
-    const safeChunks = this.truncateParentChunks(parentChunks, 6000)
+    const safeChunks = this.truncateParentChunks(parentChunks, 1024)
 
     const systemPrompt = this.buildStrictSystemPrompt({
       ontologicalRules,
@@ -228,7 +228,7 @@ ${contextText}`
 
           const retryPrompt = this.buildStrictSystemPrompt({
             ontologicalRules,
-            parentChunks: this.truncateParentChunks(parentChunks, 2048)
+            parentChunks: this.truncateParentChunks(parentChunks, 1024)
           })
 
           const fallbackCompletion = await this.engine.chat.completions.create({
