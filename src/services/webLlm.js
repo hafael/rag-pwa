@@ -38,7 +38,7 @@ export class WebLlmService {
   /**
    * Trunca chunks para evitar prompt excessivo e OOM em GPUBuffer.mapAsync
    */
-  truncateParentChunks(parentChunks = [], maxChars = 3500) {
+  truncateParentChunks(parentChunks = [], maxChars = 1024) {
     const out = []
     let used = 0
 
@@ -104,7 +104,7 @@ export class WebLlmService {
     const appConfig = { ...prebuiltAppConfig, cacheBackend: 'cache' }
 
     // Contexto menor em mobile para reduzir pressão de VRAM
-    const contextWindow = this.isMobileDevice() ? 1536 : 3072
+    const contextWindow = this.isMobileDevice() ? 2048 : 3072
 
     try {
       this.engine = await CreateMLCEngine(
@@ -228,7 +228,7 @@ ${contextText}`
 
           const retryPrompt = this.buildStrictSystemPrompt({
             ontologicalRules,
-            parentChunks: this.truncateParentChunks(parentChunks, 3500)
+            parentChunks: this.truncateParentChunks(parentChunks, 2048)
           })
 
           const fallbackCompletion = await this.engine.chat.completions.create({
