@@ -214,9 +214,14 @@ onMounted(async () => {
   // 1. Diagnóstico de hardware
   hardware.value = await checkHardwareCapabilities()
 
-  // Se o dispositivo não suportar shader-f16 (como Samsung/Android Chrome), define modelo f32 compatível
-  if (hardware.value.webgpu && !hardware.value.hasF16) {
-    webLlmService.currentModelId = 'Llama-3.2-1B-Instruct-q4f32_1-MLC'
+  // Perfil mobile: modelo ultra-leve (Fase 1). Desktop sem f16: fallback f32 1B.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+  if (hardware.value.webgpu) {
+    if (isMobile) {
+      webLlmService.currentModelId = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
+    } else if (!hardware.value.hasF16) {
+      webLlmService.currentModelId = 'Llama-3.2-1B-Instruct-q4f32_1-MLC'
+    }
   }
 
   // 2. Carrega bases salvas
@@ -340,13 +345,14 @@ async function handleSendMessage(query) {
     const expansion = ontologyEngine.expandQuery(query, activeTriples)
 
     // 3. Execução da Busca RAG Híbrida Tripla (Dense Cosine + Sparse BM25 + RRF + OWL Boost)
+    const isMobile = webLlmService.isMobileDevice()
     const ragResult = await hybridRagEngine.search({
       query,
       kbId,
       expandedTerms: expansion.expandedTerms,
       rulesMatched: expansion.rulesMatched,
-      topChildK: 8,
-      topParentK: 3
+      topChildK: isMobile ? 4 : 8,
+      topParentK: isMobile ? 1 : 3
     })
 
     const retrievedParents = ragResult.retrievedParents

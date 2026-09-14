@@ -29,10 +29,40 @@ export class WebLlmService {
   }
 
   /**
+   * Limites de inferência por perfil de dispositivo (Fase 1 — otimização mobile)
+   */
+  getInferenceLimits(retry = false) {
+    const mobile = this.isMobileDevice()
+    if (retry) {
+      return {
+        contextWindow: mobile ? 1024 : 2048,
+        maxTokens: mobile ? 64 : 128,
+        maxParentChunks: 1,
+        maxContextChars: mobile ? 256 : 512
+      }
+    }
+    return {
+      contextWindow: mobile ? 1536 : 4096,
+      maxTokens: mobile ? 128 : 384,
+      maxParentChunks: mobile ? 1 : 3,
+      maxContextChars: mobile ? 512 : 1024
+    }
+  }
+
+  /**
    * Define max_tokens seguro de acordo com dispositivo
    */
-  computeSafeMaxTokens() {
-    return this.isMobileDevice() ? 192 : 384
+  computeSafeMaxTokens(retry = false) {
+    return this.getInferenceLimits(retry).maxTokens
+  }
+
+  /**
+   * Prepara chunks pais respeitando limite de quantidade e caracteres
+   */
+  prepareParentChunks(parentChunks = [], retry = false) {
+    const { maxParentChunks, maxContextChars } = this.getInferenceLimits(retry)
+    const limited = (parentChunks || []).slice(0, maxParentChunks)
+    return this.truncateParentChunks(limited, maxContextChars)
   }
 
   /**
@@ -103,8 +133,7 @@ export class WebLlmService {
     // Cache API é o backend primário mais estável em navegadores mobile/PWA
     const appConfig = { ...prebuiltAppConfig, cacheBackend: 'cache' }
 
-    // Contexto menor em mobile para reduzir pressão de VRAM
-    const contextWindow = this.isMobileDevice() ? 3072 : 2048
+    const { contextWindow } = this.getInferenceLimits()
 
     try {
       this.engine = await CreateMLCEngine(
@@ -140,13 +169,21 @@ export class WebLlmService {
    * Constrói o Prompt de Sistema Estrito Anti-Alucinação (Seção 7.1 do Plano)
    */
   buildStrictSystemPrompt({ ontologicalRules, parentChunks }) {
-    const rulesText = ontologicalRules && ontologicalRules.length > 0
-      ? ontologicalRules.map(r => r.rule ? `- ${r.rule}` : `- Conceito [${r.concept}]`).join('\n')
-      : 'Nenhuma regra formal específica de domínio cadastrada.'
-
     const contextText = parentChunks && parentChunks.length > 0
       ? parentChunks.map((p, idx) => `[EVIDÊNCIA ${idx + 1} - ${p.sectionTitle || 'Documento'}]:\n${p.content}`).join('\n\n')
       : 'Nenhum contexto textual relevante encontrado na base.'
+
+    if (this.isMobileDevice()) {
+      const rulesSnippet = ontologicalRules?.length > 0
+        ? ontologicalRules.slice(0, 2).map(r => r.rule || r.concept).join('; ')
+        : ''
+      return `Responda SOMENTE com base no CONTEXTO abaixo. Se insuficiente, diga: "Não há informações suficientes na base de conhecimento carregada para responder a esta pergunta." Português, objetivo.
+${rulesSnippet ? `Regras: ${rulesSnippet}\n` : ''}CONTEXTO:\n${contextText}`
+    }
+
+    const rulesText = ontologicalRules && ontologicalRules.length > 0
+      ? ontologicalRules.map(r => r.rule ? `- ${r.rule}` : `- Conceito [${r.concept}]`).join('\n')
+      : 'Nenhuma regra formal específica de domínio cadastrada.'
 
     return `[SISTEMA: MODO DE RESPOSTA ESTRITO E SEM ALUCINAÇÕES]
 Você é um assistente de inteligência artificial de precisão. Sua tarefa é responder à pergunta do usuário utilizando EXCLUSIVAMENTE as evidências textuais fornecidas na seção CONTEXTO e as regras ontológicas definidas.
@@ -180,8 +217,7 @@ ${contextText}`
       await this.loadModel(this.currentModelId, onProgress)
     }
 
-    // Limita contexto para reduzir risco de OOM
-    const safeChunks = this.truncateParentChunks(parentChunks, 1024)
+    const safeChunks = this.prepareParentChunks(parentChunks)
 
     const systemPrompt = this.buildStrictSystemPrompt({
       ontologicalRules,
@@ -226,9 +262,10 @@ ${contextText}`
           await this.unload()
           await this.loadModel(this.currentModelId, onProgress)
 
+          const retryChunks = this.prepareParentChunks(parentChunks, true)
           const retryPrompt = this.buildStrictSystemPrompt({
             ontologicalRules,
-            parentChunks: this.truncateParentChunks(parentChunks, 1024)
+            parentChunks: retryChunks
           })
 
           const fallbackCompletion = await this.engine.chat.completions.create({
@@ -238,7 +275,7 @@ ${contextText}`
             ],
             stream: true,
             temperature: 0.1,
-            max_tokens: 192
+            max_tokens: this.computeSafeMaxTokens(true)
           })
 
           let fullResponse = ''
