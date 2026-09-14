@@ -141,6 +141,8 @@ import { ingestionService } from './services/ingestion.js'
 import { ontologyEngine } from './services/ontologyEngine.js'
 import { hybridRagEngine } from './services/hybridRag.js'
 import { webLlmService } from './services/webLlm.js'
+import { embeddingService } from './services/vectorEmbeddings.js'
+import { getDeviceProfile } from './services/deviceProfile.js'
 
 const navTabs = [
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
@@ -180,10 +182,12 @@ const isGenerating = ref(false)
 const llmStatus = ref(webLlmService.status)           // 'idle'|'loading'|'ready'|'generating'|'error'
 const llmLoadingProgress = ref(webLlmService.loadingProgress)
 const llmErrorMessage = ref(webLlmService.errorMessage)
+const deviceProfile = ref(getDeviceProfile())
 
 /** Inicia o carregamento do modelo, atualizando o estado reativo */
 async function ensureLlmLoaded(force = false) {
   if (!hardware.value.webgpu) return
+  if (!deviceProfile.value.preloadLlmOnChatTab && !force) return
   if (!force && (llmStatus.value === 'ready' || llmStatus.value === 'loading')) return
 
   llmStatus.value = 'loading'
@@ -213,14 +217,16 @@ watch(activeTab, (tab) => {
 onMounted(async () => {
   // 1. Diagnóstico de hardware
   hardware.value = await checkHardwareCapabilities()
+  deviceProfile.value = getDeviceProfile(hardware.value)
 
-  // Perfil mobile: modelo ultra-leve (Fase 1). Desktop sem f16: fallback f32 1B.
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
   if (hardware.value.webgpu) {
-    if (isMobile) {
-      webLlmService.currentModelId = 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC'
-    } else if (!hardware.value.hasF16) {
-      webLlmService.currentModelId = 'Llama-3.2-1B-Instruct-q4f32_1-MLC'
+    webLlmService.currentModelId = deviceProfile.value.modelId
+    if (deviceProfile.value.constrained) {
+      console.info('[EdgeRAG] Perfil restrito (mobile/low-VRAM):', {
+        maxStorageBufferMB: hardware.value.webgpuDetails?.limits?.maxStorageBufferMB,
+        modelId: deviceProfile.value.modelId,
+        bm25OnlyInChat: deviceProfile.value.skipDenseSearchInChat
+      })
     }
   }
 
@@ -344,16 +350,26 @@ async function handleSendMessage(query) {
     const activeTriples = await db.ontologyTriples.where({ kbId }).toArray()
     const expansion = ontologyEngine.expandQuery(query, activeTriples)
 
-    // 3. Execução da Busca RAG Híbrida Tripla (Dense Cosine + Sparse BM25 + RRF + OWL Boost)
-    const isMobile = webLlmService.isMobileDevice()
+    // 3. Fase 2: em perfil restrito, descarrega SLM antes do RAG para liberar VRAM
+    const profile = deviceProfile.value
+    if (profile.unloadLlmBeforeRag && llmStatus.value === 'ready') {
+      await webLlmService.unload()
+      llmStatus.value = 'idle'
+    }
+
+    // Busca RAG — BM25-only no mobile/low-VRAM (evita carregar MiniLM durante chat)
     const ragResult = await hybridRagEngine.search({
       query,
       kbId,
       expandedTerms: expansion.expandedTerms,
       rulesMatched: expansion.rulesMatched,
-      topChildK: isMobile ? 4 : 8,
-      topParentK: isMobile ? 1 : 3
+      topChildK: profile.topChildK,
+      topParentK: profile.topParentK,
+      skipDenseSearch: profile.skipDenseSearchInChat
     })
+
+    // Libera pipeline de embeddings antes de ocupar a GPU com WebLLM
+    await embeddingService.dispose()
 
     const retrievedParents = ragResult.retrievedParents
 
@@ -392,6 +408,10 @@ async function handleSendMessage(query) {
 
     try {
       if (hardware.value.webgpu) {
+        llmStatus.value = 'loading'
+        await webLlmService.loadModel(webLlmService.currentModelId, (prog) => {
+          llmLoadingProgress.value = prog
+        })
         llmStatus.value = 'generating'
         await webLlmService.generateStreamingAnswer({
           userQuery: query,
@@ -402,9 +422,13 @@ async function handleSendMessage(query) {
             assistantResponse = full
           }
         })
-        llmStatus.value = 'ready'
+        llmStatus.value = profile.unloadLlmAfterResponse ? 'idle' : 'ready'
         llmErrorMessage.value = null
         streamSucceeded = true
+
+        if (profile.unloadLlmAfterResponse) {
+          await webLlmService.unload()
+        }
       }
     } catch (llmErr) {
       failureReason = llmErr.message || String(llmErr)

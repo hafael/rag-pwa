@@ -21,7 +21,8 @@ export class HybridRagEngine {
     expandedTerms = [],
     rulesMatched = [],
     topChildK = 10,
-    topParentK = 3
+    topParentK = 3,
+    skipDenseSearch = false
   }) {
     // 1. Carrega todos os Chunks Filhos da Base de Conhecimento ativa
     const childChunks = await db.childChunks.where({ kbId }).toArray()
@@ -49,23 +50,27 @@ export class HybridRagEngine {
       })
     })
 
-    // 3. Busca Densa (Vetores de Embedding)
+    // 3. Busca Densa (Vetores de Embedding) — omitida em mobile/low-VRAM para não carregar MiniLM junto ao WebLLM
     const denseScores = []
-    try {
-      const queryEmbedding = await embeddingService.generateEmbedding(query)
+    if (skipDenseSearch) {
+      console.info('[RAG] Busca densa omitida (perfil restrito — BM25-only).')
+    } else {
+      try {
+        const queryEmbedding = await embeddingService.generateEmbedding(query)
 
-      for (const chunk of childChunks) {
-        if (chunk.embedding && Array.isArray(chunk.embedding)) {
-          const sim = embeddingService.cosineSimilarity(queryEmbedding, chunk.embedding)
-          if (sim > 0) {
-            denseScores.push({ chunk, similarity: sim })
+        for (const chunk of childChunks) {
+          if (chunk.embedding && Array.isArray(chunk.embedding)) {
+            const sim = embeddingService.cosineSimilarity(queryEmbedding, chunk.embedding)
+            if (sim > 0) {
+              denseScores.push({ chunk, similarity: sim })
+            }
           }
         }
-      }
 
-      denseScores.sort((a, b) => b.similarity - a.similarity)
-    } catch (e) {
-      console.warn('Busca densa ignorada ou em fallback:', e)
+        denseScores.sort((a, b) => b.similarity - a.similarity)
+      } catch (e) {
+        console.warn('Busca densa ignorada ou em fallback:', e)
+      }
     }
 
     const denseRankMap = new Map()
@@ -163,7 +168,8 @@ export class HybridRagEngine {
         totalChildrenSearched: childChunks.length,
         denseMatches: denseScores.length,
         sparseMatches: sparseResults.length,
-        parentsRetrieved: retrievedParents.length
+        parentsRetrieved: retrievedParents.length,
+        denseSearchSkipped: skipDenseSearch
       }
     }
   }

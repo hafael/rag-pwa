@@ -77,6 +77,12 @@ export class IngestionService {
 
       onProgress?.({ stage: 'Gerando embeddings vetoriais (all-MiniLM-L6-v2)...', percent: 55 })
       try {
+        const { getDeviceProfile } = await import('./deviceProfile.js')
+        const { webLlmService } = await import('./webLlm.js')
+        if (getDeviceProfile().constrained && webLlmService.status === 'ready') {
+          await webLlmService.unload()
+        }
+
         const { embeddingService } = await import('./vectorEmbeddings.js')
         for (let i = 0; i < childChunks.length; i++) {
           try {

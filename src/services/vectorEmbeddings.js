@@ -81,6 +81,24 @@ export class EmbeddingService {
     }
     return dotProduct
   }
+
+  /**
+   * Libera o pipeline ONNX/WASM da memória antes de carregar o WebLLM (Fase 2).
+   */
+  async dispose() {
+    if (!this.pipe) return
+    try {
+      if (typeof this.pipe.dispose === 'function') {
+        await this.pipe.dispose()
+      }
+    } catch (e) {
+      console.warn('[Embeddings] Erro ao descartar pipeline:', e)
+    }
+    this.pipe = null
+    this.isLoading = false
+    // Pequena pausa para GC liberar buffers WASM antes do WebLLM ocupar a GPU
+    await new Promise(r => setTimeout(r, 150))
+  }
 }
 
 export const embeddingService = new EmbeddingService()

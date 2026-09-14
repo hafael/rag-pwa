@@ -203,6 +203,35 @@ ${contextText}`
   }
 
   /**
+   * Erros GPU irrecuperáveis (device lost) vs OOM recuperável com retry
+   */
+  isDeviceLostError(err) {
+    const msg = String(err?.message || err || '').toLowerCase()
+    return msg.includes('device was lost') ||
+      msg.includes('device lost') ||
+      msg.includes('device_lost') ||
+      msg.includes('vk_error_device_lost')
+  }
+
+  isRecoverableGpuOom(err) {
+    const msg = String(err?.message || err || '')
+    if (this.isDeviceLostError(err)) return false
+    return msg.includes('mapAsync') ||
+      msg.toLowerCase().includes('out of memory') ||
+      msg.toLowerCase().includes('allocation')
+  }
+
+  /**
+   * Reseta estado interno sem chamar unload() em engine já corrompida
+   */
+  resetAfterDeviceLost() {
+    this.engine = null
+    this.status = 'error'
+    this.errorMessage =
+      'A GPU do dispositivo foi reiniciada por falta de memória. Recarregue a página antes de tentar novamente.'
+  }
+
+  /**
    * Gera a resposta com Streaming de tokens via WebGPU
    */
   async generateStreamingAnswer({
@@ -249,13 +278,13 @@ ${contextText}`
       this.status = 'ready'
       return fullResponse
     } catch (err) {
-      const msg = String(err?.message || err || '')
-      const isGpuOom =
-        msg.includes('mapAsync') ||
-        msg.toLowerCase().includes('out of memory') ||
-        msg.toLowerCase().includes('allocation')
+      if (this.isDeviceLostError(err)) {
+        console.error('[WebLLM] GPU device lost — retry abortado. Recarregue a página.')
+        this.resetAfterDeviceLost()
+        throw new Error(this.errorMessage)
+      }
 
-      if (isGpuOom) {
+      if (this.isRecoverableGpuOom(err)) {
         console.warn('[WebLLM] OOM detectado. Recarregando engine e tentando novamente com parâmetros reduzidos...')
 
         try {
@@ -309,15 +338,21 @@ ${contextText}`
    * Descarrega o modelo atual da VRAM / WebGPU
    */
   async unload() {
-    if (this.engine) {
-      try {
-        await this.engine.unload()
-      } catch (e) {
-        console.warn('Erro ao descarregar engine WebLLM:', e)
-      }
-      this.engine = null
+    if (!this.engine) {
       this.status = 'idle'
-      this.loadingProgress = { text: '', progress: 0 }
+      return
+    }
+
+    const engineRef = this.engine
+    this.engine = null
+    this.status = 'idle'
+    this.loadingProgress = { text: '', progress: 0 }
+
+    try {
+      await engineRef.unload()
+    } catch (e) {
+      // Após device lost, unload() falha com "Tokenizer instance already deleted"
+      console.warn('[WebLLM] unload() ignorado (engine possivelmente corrompida):', e?.message || e)
     }
   }
 }
